@@ -1,22 +1,25 @@
 import { callLLM } from "@/lib/llm/ollama";
+import { getRecentMemory } from "@/lib/memory/store";
 
 export async function plannerAgent(userGoal: string): Promise<string> {
+  const memory = getRecentMemory();
+
   const prompt = `
 You are a PLANNER agent.
 
-Break the user's goal into clear step-by-step actionable tasks.
+Previous context:
+${JSON.stringify(memory, null, 2)}
+
+Now plan the new goal.
 
 Goal:
 ${userGoal}
 
 Rules:
+- Avoid repeating previous strategies
 - Be concise
-- Use numbered list
 - Max 6 steps
-
-Output:
 `;
 
-  const result = await callLLM(prompt);
-  return result;
+  return await callLLM(prompt);
 }
