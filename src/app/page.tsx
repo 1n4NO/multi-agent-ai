@@ -10,6 +10,7 @@ import {
   Box,
 } from "@mui/material";
 import AgentGraph from "@/components/AgentGraph";
+import MarkdownRenderer from "@/components/MarkdownRenderer";
 
 export default function Home() {
   const [goal, setGoal] = useState("");
@@ -50,8 +51,8 @@ export default function Home() {
   };
 
   return (
-    <Container maxWidth="md" style={{ marginTop: 40 }}>
-      <Typography variant="h4" gutterBottom>
+    <Container maxWidth="md" style={{ marginTop: 40, paddingTop: 40 }}>
+      <Typography variant="h4" style={{ position: 'absolute', top: 20, left: 40, zIndex: 1 }}>
         Multi-Agent AI System
       </Typography>
 
@@ -76,7 +77,13 @@ export default function Home() {
       {/* Logs Panel */}
       <Paper style={{ padding: 20, marginTop: 20, maxHeight: 300, overflow: "auto" }}>
         {logs.map((log, i) => (
-          <pre key={i}>{JSON.stringify(log, null, 2)}</pre>
+          <div key={i} style={{ marginBottom: 20 }}>
+            {log.data && typeof log.data === "string" ? (
+              <MarkdownRenderer content={log.data} />
+            ) : (
+              <pre>{JSON.stringify(log, null, 2)}</pre>
+            )}
+          </div>
         ))}
       </Paper>
     </Container>

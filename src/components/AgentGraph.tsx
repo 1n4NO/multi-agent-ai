@@ -8,7 +8,7 @@ export default function AgentGraph({ currentStep }: { currentStep: string }) {
     {
       id: "planner",
       data: { label: "Planner" },
-      position: { x: 0, y: 50 },
+      position: { x: 20, y: 50 },
       style: {
         background: currentStep.startsWith("planner")
           ? "#4caf50"
@@ -54,10 +54,9 @@ export default function AgentGraph({ currentStep }: { currentStep: string }) {
   ];
 
   return (
-    <div style={{ height: 200, marginTop: 20 }}>
+    <div style={{ height: 150, marginTop: 20 }}>
       <ReactFlow nodes={nodes} edges={edges} fitView>
         <Background />
-        <Controls />
       </ReactFlow>
     </div>
   );

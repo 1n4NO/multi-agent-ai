@@ -19,6 +19,12 @@ Rules:
 - Avoid repeating previous strategies
 - Be concise
 - Max 6 steps
+
+Format your response in clean markdown:
+- Use headings
+- Use numbered lists
+- Use bold where needed
+- Keep it readable
 `;
 
   return await callLLM(prompt);

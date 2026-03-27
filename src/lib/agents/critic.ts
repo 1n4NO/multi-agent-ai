@@ -10,6 +10,12 @@ Improve the content below:
 - Remove fluff
 - Make it more actionable
 
+Format your response in clean markdown:
+- Use headings
+- Use numbered lists
+- Use bold where needed
+- Keep it readable
+
 Content:
 ${content}
 

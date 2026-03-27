@@ -20,6 +20,12 @@ Rules:
 - Professional tone
 - Actionable content
 
+Format your response in clean markdown:
+- Use headings
+- Use numbered lists
+- Use bold where needed
+- Keep it readable
+
 Output:
 `;
 

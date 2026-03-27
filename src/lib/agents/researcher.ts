@@ -15,6 +15,12 @@ Rules:
 - Use bullet points
 - Add practical insights
 
+Format your response in clean markdown:
+- Use headings
+- Use numbered lists
+- Use bold where needed
+- Keep it readable
+
 Output:
 `;
 
