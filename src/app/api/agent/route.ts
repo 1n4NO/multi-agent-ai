@@ -1,27 +1,39 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { runAgents } from "@/lib/orchestrator/runAgents";
 
 export async function POST(req: NextRequest) {
-  try {
-    const { goal } = await req.json();
+  const { goal } = await req.json();
 
-    if (!goal) {
-      return NextResponse.json(
-        { success: false, error: "Goal is required" },
-        { status: 400 }
-      );
-    }
+  const encoder = new TextEncoder();
 
-    const result = await runAgents(goal);
+  const stream = new ReadableStream({
+    async start(controller) {
+      function send(data: any) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(data)}\n\n`)
+        );
+      }
 
-    return NextResponse.json({
-      success: true,
-      data: result,
-    });
-  } catch (error) {
-    return NextResponse.json(
-      { success: false, error: "Something went wrong" },
-      { status: 500 }
-    );
-  }
+      try {
+        send({ step: "start", message: "Processing started..." });
+
+        const result = await runAgents(goal);
+
+        send({ step: "complete", data: result });
+
+        controller.close();
+      } catch (err) {
+        send({ step: "error", message: "Something went wrong" });
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
 }
