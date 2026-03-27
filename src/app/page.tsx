@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import AgentGraph from "@/components/AgentGraph";
 
 export default function Home() {
   const [goal, setGoal] = useState("");
-  const [logs, setLogs] = useState<string[]>([]);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [currentStep, setCurrentStep] = useState("");
 
   const runAgents = async () => {
     setLogs([]);
+    setCurrentStep("");
 
     const res = await fetch("/api/agent", {
       method: "POST",
@@ -27,7 +30,13 @@ export default function Home() {
       lines.forEach((line) => {
         if (line.startsWith("data: ")) {
           const parsed = JSON.parse(line.replace("data: ", ""));
-          setLogs((prev) => [...prev, JSON.stringify(parsed)]);
+
+          // 🔥 track current step
+          if (parsed.step) {
+            setCurrentStep(parsed.step);
+          }
+
+          setLogs((prev) => [...prev, parsed]);
         }
       });
     }
@@ -45,9 +54,13 @@ export default function Home() {
 
       <button onClick={runAgents}>Run</button>
 
-      <div>
+      {/* 🔥 Agent Graph */}
+      <AgentGraph currentStep={currentStep} />
+
+      {/* Logs */}
+      <div style={{ marginTop: 20 }}>
         {logs.map((log, i) => (
-          <pre key={i}>{log}</pre>
+          <pre key={i}>{JSON.stringify(log, null, 2)}</pre>
         ))}
       </div>
     </div>
