@@ -8,7 +8,9 @@ import {
   Typography,
   Paper,
   Box,
+  Stack,
 } from "@mui/material";
+import { copyToClipboard, exportToPDF } from "@/lib/utils/export";
 import AgentGraph from "@/components/AgentGraph";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 
@@ -50,6 +52,8 @@ export default function Home() {
     }
   };
 
+  const finalResult = logs.find((log) => log.step === "complete")?.data;
+
   return (
     <Container maxWidth="md" style={{ marginTop: 40, paddingTop: 40 }}>
       <Typography variant="h4" style={{ position: 'absolute', top: 20, left: 40, zIndex: 1 }}>
@@ -86,6 +90,25 @@ export default function Home() {
           </div>
         ))}
       </Paper>
+      {finalResult && (
+        <Stack direction="row" spacing={2} mt={2} justifyContent={"flex-end"}>
+          <Button
+            variant="outlined"
+            onClick={() => copyToClipboard(finalResult.final)}
+          >
+            Copy
+          </Button>
+
+          <Button
+            variant="contained"
+            onClick={() =>
+              exportToPDF("AI Final Output", finalResult.final)
+            }
+          >
+            Export PDF
+          </Button>
+        </Stack>
+      )}
     </Container>
   );
 }

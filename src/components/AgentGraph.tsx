@@ -57,6 +57,7 @@ export default function AgentGraph({ currentStep }: { currentStep: string }) {
     <div style={{ height: 150, marginTop: 20 }}>
       <ReactFlow nodes={nodes} edges={edges} fitView>
         <Background />
+        <Controls />
       </ReactFlow>
     </div>
   );
