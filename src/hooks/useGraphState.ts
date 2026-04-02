@@ -68,6 +68,10 @@ function reducer(state: State, action: Action): State {
 		}
 
 		case "NODE_PROGRESS": {
+			if (state.researcherProgress[action.nodeId] === action.progress) {
+				return state; // 🚫 prevent useless re-render
+			}
+
 			return {
 				...state,
 				researcherProgress: {

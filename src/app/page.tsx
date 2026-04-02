@@ -141,9 +141,16 @@ export default function Home() {
 
 				// ✅ DISPATCH IN BATCH (important)
 				if (actions.length > 0) {
-					setTimeout(() => {
-						actions.forEach((action) => dispatch(action));
-					}, 0);
+					const seen = new Set();
+
+					for (const action of actions) {
+						const key = JSON.stringify(action);
+
+						if (!seen.has(key)) {
+							dispatch(action);
+							seen.add(key);
+						}
+					}
 				}
 			}
 		} catch (err: any) {
@@ -158,7 +165,13 @@ export default function Home() {
 		}
 	};
 
-	const finalResult = logs.find((log) => log.step === "complete")?.data;
+	const finalLog = logs.find((log) => log.step === "complete");
+
+	const finalContent =
+		finalLog?.data?.critic ||
+		finalLog?.data?.writer ||
+		"";
+
 
 	return (
 		<Container maxWidth={false} sx={{ mt: 4 }}>
@@ -205,28 +218,23 @@ export default function Home() {
 				</Paper> */}
 
 				{/* Actions */}
-				{finalResult && (
-					<Stack direction="row" spacing={2} justifyContent="flex-end">
-						<Button
-							variant="outlined"
-							disabled={!finalResult?.final}
-							onClick={() => copyToClipboard(finalResult.final)}
-						>
-							Copy
-						</Button>
+				<Stack direction="row" spacing={2} justifyContent="flex-end">
+					<Button
+						variant="outlined"
+						disabled={!finalContent}
+						onClick={() => copyToClipboard(finalContent)}
+					>
+						Copy
+					</Button>
 
-						<Button
-							variant="contained"
-							disabled={!finalResult?.final}
-							onClick={() => {
-								if (!finalResult?.final) return;
-								exportToPDF("AI Final Output", finalResult.final);
-							}}
-						>
-							Export PDF
-						</Button>
-					</Stack>
-				)}
+					<Button
+						variant="contained"
+						disabled={!finalContent}
+						onClick={() => exportToPDF("AI Final Output", finalContent)}
+					>
+						Export PDF
+					</Button>
+				</Stack>
 			</Box>
 		</Container>
 	);
