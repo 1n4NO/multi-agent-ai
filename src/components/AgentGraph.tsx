@@ -307,6 +307,13 @@ export default function AgentGraph({ graphState }: Props) {
 		});
 	}, [streamingContent]);
 
+	useEffect(() => {
+	if (graphState.lastEvent?.type === "RESET") {
+		setThoughts({});
+		setSelectedNode(null); // also clear selection
+	}
+}, [graphState.lastEvent]);
+
 	return (
 		<div style={{ display: "flex", flex: 1, minHeight: "calc(100vh - 200px)" }}>
 			{/* 🔥 GRAPH PANEL */}

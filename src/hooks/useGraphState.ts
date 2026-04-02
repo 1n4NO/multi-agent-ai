@@ -3,6 +3,11 @@
 import { useReducer } from "react";
 
 type State = {
+	goal: string;
+	data: Record<string, any>;
+	meta: {
+		attempts: Record<string, number>;
+	};
 	activeNode: string | null;
 	activeNodes: Set<string>;
 	completedNodes: Set<string>;
@@ -26,6 +31,9 @@ type Action =
 	| { type: "RESET" };
 
 const initialState: State = {
+	goal: "",
+	data: {},
+	meta: { attempts: {} },
 	activeNode: null,
 	activeNodes: new Set<string>(),
 	completedNodes: new Set<string>(),
@@ -129,7 +137,13 @@ function reducer(state: State, action: Action): State {
 			};
 
 		case "RESET":
-			return initialState;
+			return {
+				...initialState,
+				activeNodes: new Set(),
+				completedNodes: new Set(),
+				failedNodes: new Set(),
+				lastEvent: { type: "RESET" },
+			};
 
 		default:
 			return state;

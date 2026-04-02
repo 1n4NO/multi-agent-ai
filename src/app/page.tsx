@@ -20,101 +20,124 @@ export default function Home() {
 	const [goal, setGoal] = useState("");
 	const [logs, setLogs] = useState<any[]>([]);
 	const { state, dispatch } = useGraphState();
+	const [isRunning, setIsRunning] = useState(false);
+	const [controller, setController] = useState<AbortController | null>(null);
 
 	const runAgents = async () => {
+		// 🔴 If already running → CANCEL
+		if (isRunning && controller) {
+			controller.abort();
+
+			// reset everything
+			setIsRunning(false);
+			setLogs([]);
+			dispatch({ type: "RESET" });
+
+			return;
+		}
+
+		// 🟢 START NEW RUN
+		const abortController = new AbortController();
+		setController(abortController);
+		setIsRunning(true);
 		setLogs([]);
 
-		const res = await fetch("/api/agent", {
-			method: "POST",
-			body: JSON.stringify({ goal }),
-		});
+		try {
+			const res = await fetch("/api/agent", {
+				method: "POST",
+				body: JSON.stringify({ goal }),
+				signal: abortController.signal, // 🔥 important
+			});
 
-		const reader = res.body?.getReader();
-		const decoder = new TextDecoder();
+			const reader = res.body?.getReader();
+			const decoder = new TextDecoder();
 
-		while (true) {
-			const { done, value } = await reader!.read();
-			if (done) break;
+			while (true) {
+				const { done, value } = await reader!.read();
+				if (done) break;
 
-			const chunk = decoder.decode(value);
-			const lines = chunk.split("\n\n");
+				const chunk = decoder.decode(value);
+				const lines = chunk.split("\n\n");
 
-			lines.forEach((line) => {
-				if (line.startsWith("data: ")) {
-					const parsed = JSON.parse(line.replace("data: ", ""));
-					// 🔥 STREAMING CONTENT HANDLER
-					if (parsed.step === "stream") {
-						const { nodeId, content } = parsed;
+				lines.forEach((line) => {
+					if (line.startsWith("data: ")) {
+						const parsed = JSON.parse(line.replace("data: ", ""));
 
-						dispatch({
-							type: "NODE_STREAM",
-							nodeId,
-							content,
-						});
+						setLogs((prev) => [...prev, parsed]);
 
-						return;
-					}
+						const step = parsed.step;
 
-					setLogs((prev) => [...prev, parsed]);
+						// 🔥 STREAMING
+						if (step === "stream") {
+							dispatch({
+								type: "NODE_STREAM",
+								nodeId: parsed.nodeId,
+								content: parsed.content,
+							});
+							return;
+						}
 
-					const step = parsed.step;
-
-					// 🔥 Node lifecycle updates
-					if (step === "NODE_PROGRESS") {
-						if (parsed.nodeId) {
+						// 🔥 PROGRESS
+						if (step === "NODE_PROGRESS") {
 							dispatch({
 								type: "NODE_PROGRESS",
 								nodeId: parsed.nodeId,
 								progress: parsed.progress ?? 0,
 							});
+							return;
 						}
-						return;
-					}
 
-					if (step?.includes("_start")) {
-						const nodeId = step.replace("_start", "");
-						dispatch({
-							type: "NODE_START",
-							nodeId,
-							attempt: parsed.attempt,
-						});
-					}
+						// 🔥 START
+						if (step?.includes("_start")) {
+							const nodeId = step.replace("_start", "");
+							dispatch({
+								type: "NODE_START",
+								nodeId,
+								attempt: parsed.attempt,
+							});
+						}
 
-					if (step?.includes("_done")) {
-						const nodeId = step.replace("_done", "");
-						dispatch({ type: "NODE_DONE", nodeId });
+						// 🔥 DONE
+						if (step?.includes("_done")) {
+							const nodeId = step.replace("_done", "");
+							dispatch({ type: "NODE_DONE", nodeId });
 
-						// ✅ capture planner output
-						if (nodeId === "planner") {
-							const parsePlannerOutput = (text: string) => {
-								return text
-									.split(/\n\d+\.\s/) // split by numbered points
-									.map((item) => item.trim())
-									.filter(Boolean);
-							};
+							if (nodeId === "planner") {
+								const parsePlannerOutput = (text: string) => {
+									return text
+										.split(/\n\d+\.\s/)
+										.map((item) => item.trim())
+										.filter(Boolean);
+								};
 
-							if (step === "planner_done") {
-								const raw = parsed.data;
-
-								const tasks = parsePlannerOutput(raw);
+								const tasks = parsePlannerOutput(parsed.data);
 
 								dispatch({
 									type: "PLANNER_DONE",
 									data: {
-										researchers: tasks.map((task: string) => ({
-											topic: task,
+										researchers: tasks.map((t: string) => ({
+											topic: t,
 										})),
 									},
 								});
 							}
 						}
-					}
 
-					if (step === "error") {
-						dispatch({ type: "NODE_FAIL", nodeId: "unknown" });
+						if (step === "complete") {
+							setIsRunning(false);
+						}
 					}
-				}
-			});
+				});
+			}
+		} catch (err: any) {
+			if (err.name === "AbortError") {
+				console.log("Run cancelled");
+			} else {
+				console.error(err);
+			}
+		} finally {
+			setIsRunning(false);
+			setController(null);
 		}
 	};
 
@@ -137,12 +160,10 @@ export default function Home() {
 					<Button
 						variant="contained"
 						onClick={runAgents}
-						sx={{
-							whiteSpace: "nowrap",
-							px: 3, // horizontal padding
-						}}
+						sx={{ whiteSpace: "nowrap", px: 3 }}
+						color={isRunning ? "error" : "primary"}
 					>
-						Run Agents
+						{isRunning ? "Cancel Run" : "Run Agents"}
 					</Button>
 				</Stack>
 			</Paper>
