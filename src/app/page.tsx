@@ -230,7 +230,9 @@ export default function Home() {
 					<Button
 						variant="contained"
 						disabled={!finalLog?.data}
-						onClick={() => exportToPDF("AI Report", finalLog?.data)}
+						onClick={async () => {
+							await exportToPDF("AI Report", finalLog?.data);
+						}}
 					>
 						Export PDF
 					</Button>
