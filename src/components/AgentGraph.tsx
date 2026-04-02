@@ -226,14 +226,14 @@ export default function AgentGraph({ graphState }: Props) {
 
 			activeNodes?.forEach((nodeId: string) => {
 				updated[nodeId] = {
-					text: `🧠 ${nodeId} is thinking...`,
+					text: `🧠 ${formatNodeLabel(nodeId)} is thinking...`,
 					timestamp: now,
 				};
 			});
 
 			if (activeNode) {
 				updated[activeNode] = {
-					text: `⚡ ${activeNode} started`,
+					text: `⚡ ${formatNodeLabel(activeNode)} started`,
 					timestamp: now,
 				};
 			}
@@ -252,14 +252,14 @@ export default function AgentGraph({ graphState }: Props) {
 
 			completedNodes?.forEach((id: string) => {
 				updated[id] = {
-					text: `✅ ${id} completed`,
+					text: `✅ ${formatNodeLabel(id)} completed`,
 					timestamp: now,
 				};
 			});
 
 			failedNodes?.forEach((id: string) => {
 				updated[id] = {
-					text: `❌ ${id} failed`,
+					text: `❌ ${formatNodeLabel(id)} failed`,
 					timestamp: now,
 				};
 			});
@@ -279,7 +279,7 @@ export default function AgentGraph({ graphState }: Props) {
 				if (!content) return;
 
 				updated[nodeId] = {
-					text: `🧠 ${nodeId}:\n${content}`,
+					text: `🧠 ${formatNodeLabel(nodeId)}:\n${content}`,
 					timestamp: now,
 				};
 			});
@@ -417,4 +417,14 @@ export default function AgentGraph({ graphState }: Props) {
 			</div>
 		</div>
 	);
+}
+
+function formatNodeLabel(nodeId: string) {
+	if (nodeId.startsWith("research_")) {
+		const index = parseInt(nodeId.split("_")[1], 10);
+		return `Researcher ${index + 1}`;
+	}
+
+	// Capitalize other nodes
+	return nodeId.charAt(0).toUpperCase() + nodeId.slice(1);
 }
