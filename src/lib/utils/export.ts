@@ -19,6 +19,54 @@ export async function exportToPDF(title: string, data: any) {
 
 	if (!data) return;
 
+	const addSubtleDivider = () => {
+		doc.setDrawColor(230);
+		doc.line(marginX, cursorY, marginX + pageWidth, cursorY);
+		cursorY += 8;
+	};
+
+	// 📊 Extract score from critic
+	const extractScore = (text: string): number => {
+		if (!text) return 0;
+		const match = text.match(/(\d+)%/);
+		return match ? parseInt(match[1]) : 0;
+	};
+
+	// 📊 Draw progress bar
+	const drawBar = (
+		label: string,
+		value: number,
+		max = 100
+	) => {
+		const barWidth = 120;
+		const barHeight = 6;
+
+		if (cursorY > pageHeight - 30) addPage();
+
+		// Label
+		doc.setFont("Helvetica", "normal");
+		doc.setFontSize(11);
+		doc.text(label, marginX, cursorY);
+
+		cursorY += 4;
+
+		// Background
+		doc.setFillColor(230, 230, 230);
+		doc.rect(marginX, cursorY, barWidth, barHeight, "F");
+
+		// Fill
+		const fillWidth = (value / max) * barWidth;
+
+		doc.setFillColor(25, 118, 210); // nice blue
+		doc.rect(marginX, cursorY, fillWidth, barHeight, "F");
+
+		// Value text
+		doc.setFontSize(10);
+		doc.text(`${value}%`, marginX + barWidth + 5, cursorY + 5);
+
+		cursorY += 12;
+	};
+
 	// 🔥 Load logo
 	const logo = await loadImageAsBase64("/logo.png");
 
@@ -127,6 +175,37 @@ export async function exportToPDF(title: string, data: any) {
 	// 📄 CONTENT PAGES
 	// =============================
 	addPage();
+
+	addSection("Metrics Dashboard", "");
+
+	// 📊 SCORE
+	const score = extractScore(data.critic);
+
+	// Big score display
+	doc.setFont("Helvetica", "bold");
+	doc.setFontSize(28);
+	doc.text(`${score}%`, marginX, cursorY);
+
+	doc.setFontSize(12);
+	doc.setFont("Helvetica", "normal");
+	doc.text("Overall AI Confidence Score", marginX + 30, cursorY);
+
+	cursorY += 10;
+
+	// Bar
+	drawBar("Confidence", score);
+
+	// 📊 Derived metrics
+	const plannerSize = data.planner?.length || 0;
+	const researchCount = data.researchers?.length || 0;
+	const writerSize = data.writer?.length || 0;
+
+	// Normalize (simple heuristic)
+	drawBar("Planning Depth", Math.min(plannerSize / 20, 100));
+	drawBar("Research Coverage", Math.min(researchCount * 15, 100));
+	drawBar("Output Detail", Math.min(writerSize / 50, 100));
+
+	addSubtleDivider();
 
 	addSection("1. Planning", data.planner);
 
