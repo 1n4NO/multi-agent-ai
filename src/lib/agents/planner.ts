@@ -5,33 +5,38 @@ export async function plannerAgent(userGoal: string): Promise<string> {
   const memory = getRecentMemory();
 
   const prompt = `
-		You are a PLANNER agent.
+You are a PLANNER agent.
 
-		Break the goal into EXACTLY numbered steps.
+GOAL:
+${userGoal}
 
-		STRICT FORMAT:
-		1. Step one
-		2. Step two
-		3. Step three
+PREVIOUS CONTEXT:
+${JSON.stringify(memory, null, 2)}
 
-		No bullet points.
-		No extra text.
+INSTRUCTIONS:
+- Break the goal into a maximum of 6 steps
+- Use EXACTLY this numbered format:
+  1. ...
+  2. ...
+  3. ...
+- Each step must be one concise sentence
+- Do NOT include any title, heading, label, or introduction
+- Do NOT repeat or rephrase the goal
+- Do NOT use bold text, markdown, or special formatting
+- Do NOT include blank lines
 
-		Previous context:
-		${JSON.stringify(memory, null, 2)}
+STRICT OUTPUT RULE:
+- Output ONLY numbered steps
+- The FIRST character of the response MUST be "1."
+- If any text appears before "1.", the response is invalid
 
-		Now plan the new goal.
+CONSTRAINTS:
+- Avoid repeating strategies from previous context
+- Keep steps practical and actionable
 
-		Goal:
-		${userGoal}
-
-		Rules:
-		- Avoid repeating previous strategies
-		- Be concise
-		- Max 6 steps
-		Do not repeat the topic. Provide only the plan in the specified format.
-		Do not provide additional text like, "Here is the planned goal:"
-	`;
+FAIL CONDITION:
+If you include anything other than the numbered steps, the response is invalid.
+`;
 
   return await callLLM(prompt);
 }

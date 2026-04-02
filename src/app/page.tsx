@@ -199,6 +199,7 @@ export default function Home() {
 					<Stack direction="row" spacing={2} justifyContent="flex-end">
 						<Button
 							variant="outlined"
+							disabled={!finalResult?.final}
 							onClick={() => copyToClipboard(finalResult.final)}
 						>
 							Copy
@@ -206,9 +207,11 @@ export default function Home() {
 
 						<Button
 							variant="contained"
-							onClick={() =>
-								exportToPDF("AI Final Output", finalResult.final)
-							}
+							disabled={!finalResult?.final}
+							onClick={() => {
+								if (!finalResult?.final) return;
+								exportToPDF("AI Final Output", finalResult.final);
+							}}
 						>
 							Export PDF
 						</Button>

@@ -1,43 +1,101 @@
 import jsPDF from "jspdf";
 
 export function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text);
+	navigator.clipboard.writeText(text);
 }
 
 export function exportToPDF(title: string, content: string) {
-  const doc = new jsPDF();
+	const doc = new jsPDF();
 
-  const cleanText = content
-  .replace(/#/g, "")
-  .replace(/\*\*/g, "")
-  .replace(/\n\n/g, "\n");
+	if (!content) {
+		console.warn("exportToPDF: content is empty");
+		return;
+	}
 
-  const pageWidth = 180;
-  const pageHeight = 280;
+	// 🧠 Clean markdown
+	const cleanText = String(content)
+		.replace(/\*\*/g, "")
+		.replace(/#/g, "")
+		.replace(/\r/g, "")
+		.trim();
 
-  const marginX = 10;
-  let cursorY = 10;
+	const pageWidth = 180;
+	const pageHeight = 280;
 
-  // Add title
-  doc.setFontSize(16);
-  doc.text(title, marginX, cursorY);
+	const marginX = 10;
+	let cursorY = 15;
 
-  cursorY += 10;
+	// 🔥 TITLE
+	doc.setFont("Helvetica", "bold");
+	doc.setFontSize(18);
+	doc.text(title, marginX, cursorY);
 
-  doc.setFontSize(12);
+	cursorY += 8;
 
-  const lines = doc.splitTextToSize(cleanText, pageWidth);
+	// 🕒 Timestamp
+	doc.setFont("Helvetica", "normal");
+	doc.setFontSize(10);
+	doc.text(
+		`Generated on ${new Date().toLocaleString()}`,
+		marginX,
+		cursorY
+	);
 
-  lines.forEach((line: string) => {
-    // If content exceeds page height → add new page
-    if (cursorY > pageHeight) {
-      doc.addPage();
-      cursorY = 10;
-    }
+	cursorY += 8;
 
-    doc.text(line, marginX, cursorY);
-    cursorY += 7;
-  });
+	// Divider
+	doc.setDrawColor(200);
+	doc.line(marginX, cursorY, marginX + pageWidth, cursorY);
 
-  doc.save(`${title}.pdf`);
+	cursorY += 10;
+
+	// 🧠 Split into paragraphs
+	const paragraphs = cleanText.split("\n");
+
+	doc.setFontSize(11);
+
+	paragraphs.forEach((para) => {
+		const text = para.trim();
+		if (!text) {
+			cursorY += 4;
+			return;
+		}
+
+		// 🧠 Detect headings (simple heuristic)
+		const isHeading =
+			text.length < 60 &&
+			(text === text.toUpperCase() || /^[A-Z]/.test(text));
+
+		// 🔥 Page break check
+		if (cursorY > pageHeight - 15) {
+			doc.addPage();
+			cursorY = 15;
+		}
+
+		if (isHeading) {
+			doc.setFont("Helvetica", "bold");
+			doc.setFontSize(13);
+
+			doc.text(text, marginX, cursorY);
+			cursorY += 7;
+
+			doc.setFont("Helvetica", "normal");
+			doc.setFontSize(11);
+		} else {
+			const lines = doc.splitTextToSize(text, pageWidth);
+
+			lines.forEach((line: string) => {
+				if (cursorY > pageHeight - 10) {
+					doc.addPage();
+					cursorY = 15;
+				}
+
+				doc.text(line, marginX, cursorY);
+				cursorY += 6;
+			});
+		}
+	});
+
+	// 🔥 Save
+	doc.save(`${title.replace(/\s+/g, "_")}.pdf`);
 }
