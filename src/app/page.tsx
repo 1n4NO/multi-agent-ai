@@ -42,24 +42,36 @@ export default function Home() {
 			lines.forEach((line) => {
 				if (line.startsWith("data: ")) {
 					const parsed = JSON.parse(line.replace("data: ", ""));
+					// 🔥 STREAMING CONTENT HANDLER
+					if (parsed.step === "stream") {
+						const { nodeId, content } = parsed;
+
+						dispatch({
+							type: "NODE_STREAM",
+							nodeId,
+							content,
+						});
+
+						return;
+					}
 
 					setLogs((prev) => [...prev, parsed]);
 
 					const step = parsed.step;
 
 					// 🔥 Node lifecycle updates
-if (step === "NODE_PROGRESS") {
-								if (parsed.nodeId) {
-									dispatch({
-										type: "NODE_PROGRESS",
-										nodeId: parsed.nodeId,
-										progress: parsed.progress ?? 0,
-									});
-								}
-								return;
-							}
+					if (step === "NODE_PROGRESS") {
+						if (parsed.nodeId) {
+							dispatch({
+								type: "NODE_PROGRESS",
+								nodeId: parsed.nodeId,
+								progress: parsed.progress ?? 0,
+							});
+						}
+						return;
+					}
 
-							if (step?.includes("_start")) {
+					if (step?.includes("_start")) {
 						const nodeId = step.replace("_start", "");
 						dispatch({
 							type: "NODE_START",
@@ -109,65 +121,65 @@ if (step === "NODE_PROGRESS") {
 	const finalResult = logs.find((log) => log.step === "complete")?.data;
 
 	return (
-	<Container maxWidth={false} sx={{ mt: 4 }}>
-		<Typography variant="h4" sx={{ mb: 2 }}>
-			Multi-Agent AI System
-		</Typography>
+		<Container maxWidth={false} sx={{ mt: 4 }}>
+			<Typography variant="h4" sx={{ mb: 2 }}>
+				Multi-Agent AI System
+			</Typography>
 
-		<Paper sx={{ p: 2, mb: 2 }}>
-			<Stack direction="row" spacing={2}>
-				<TextField
-					fullWidth
-					label="Enter your goal"
-					value={goal}
-					onChange={(e) => setGoal(e.target.value)}
-				/>
-				<Button variant="contained" onClick={runAgents}>
-					Run Agents
-				</Button>
-			</Stack>
-		</Paper>
-
-		{/* 🔥 MAIN GRAPH AREA */}
-		<Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-			<ReactFlowProvider>
-				<AgentGraph graphState={state} />
-			</ReactFlowProvider>
-
-			{/* Logs */}
-			<Paper sx={{ p: 2, maxHeight: 300, overflow: "auto" }}>
-				{logs.map((log, i) => (
-					<div key={i} style={{ marginBottom: 20 }}>
-						{log.data && typeof log.data === "string" ? (
-							<MarkdownRenderer content={log.data} />
-						) : (
-							<pre>{JSON.stringify(log, null, 2)}</pre>
-						)}
-					</div>
-				))}
-			</Paper>
-
-			{/* Actions */}
-			{finalResult && (
-				<Stack direction="row" spacing={2} justifyContent="flex-end">
-					<Button
-						variant="outlined"
-						onClick={() => copyToClipboard(finalResult.final)}
-					>
-						Copy
-					</Button>
-
-					<Button
-						variant="contained"
-						onClick={() =>
-							exportToPDF("AI Final Output", finalResult.final)
-						}
-					>
-						Export PDF
+			<Paper sx={{ p: 2, mb: 2 }}>
+				<Stack direction="row" spacing={2}>
+					<TextField
+						fullWidth
+						label="Enter your goal"
+						value={goal}
+						onChange={(e) => setGoal(e.target.value)}
+					/>
+					<Button variant="contained" onClick={runAgents}>
+						Run Agents
 					</Button>
 				</Stack>
-			)}
-		</Box>
-	</Container>
-);
+			</Paper>
+
+			{/* 🔥 MAIN GRAPH AREA */}
+			<Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+				<ReactFlowProvider>
+					<AgentGraph graphState={state} />
+				</ReactFlowProvider>
+
+				{/* Logs */}
+				<Paper sx={{ p: 2, maxHeight: 300, overflow: "auto" }}>
+					{logs.map((log, i) => (
+						<div key={i} style={{ marginBottom: 20 }}>
+							{log.data && typeof log.data === "string" ? (
+								<MarkdownRenderer content={log.data} />
+							) : (
+								<pre>{JSON.stringify(log, null, 2)}</pre>
+							)}
+						</div>
+					))}
+				</Paper>
+
+				{/* Actions */}
+				{finalResult && (
+					<Stack direction="row" spacing={2} justifyContent="flex-end">
+						<Button
+							variant="outlined"
+							onClick={() => copyToClipboard(finalResult.final)}
+						>
+							Copy
+						</Button>
+
+						<Button
+							variant="contained"
+							onClick={() =>
+								exportToPDF("AI Final Output", finalResult.final)
+							}
+						>
+							Export PDF
+						</Button>
+					</Stack>
+				)}
+			</Box>
+		</Container>
+	);
 }

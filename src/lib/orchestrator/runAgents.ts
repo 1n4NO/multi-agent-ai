@@ -4,20 +4,23 @@ import { saveToMemory } from "@/lib/memory/store";
 import { GraphState } from "@/lib/graph/types";
 
 export async function runAgents(goal: string, onStep?: any) {
-  const graph = createGraph(goal);
+	const graph = createGraph(goal);
 
-  // ✅ Properly initialize state
-  const initialState: GraphState = {
-    goal,
-    data: {},
-    meta: {
-      attempts: {},
-    },
-  };
+	// ✅ Properly initialize state
+	const initialState: GraphState = {
+		goal,
+		data: {},
+		meta: {
+			attempts: {},
+		},
+	};
 
-  const results = await executeGraph(graph, initialState, onStep);
+	const results = await executeGraph(graph, initialState, (event: any) => {
+		// Pass everything upstream (SSE layer will handle it)
+		onStep?.(event);
+	});
 
-  saveToMemory(goal, results);
+	saveToMemory(goal, results);
 
-  return results;
+	return results;
 }

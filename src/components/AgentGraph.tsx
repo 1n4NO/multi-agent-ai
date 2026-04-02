@@ -54,8 +54,9 @@ export default function AgentGraph({ graphState }: Props) {
 	const [visibleResearchCount, setVisibleResearchCount] = useState(0);
 	const [thoughts, setThoughts] = useState<
 		Record<string, { text: string; timestamp: number }>
-		>({});
+	>({});
 	const thoughtIdCounter = useRef(0);
+	const streamingContent = graphState.streamingContent || {};
 
 
 	const isResearchNode = (id: string) => id.startsWith("research_");
@@ -216,184 +217,204 @@ export default function AgentGraph({ graphState }: Props) {
 	}, [rfInstance, styledNodes, layouted.edges]);
 
 	useEffect(() => {
-	if (!activeNodes && !activeNode) return;
+		if (!activeNodes && !activeNode) return;
 
-	const now = Date.now();
+		const now = Date.now();
 
-	setThoughts((prev) => {
-		const updated = { ...prev };
+		setThoughts((prev) => {
+			const updated = { ...prev };
 
-		activeNodes?.forEach((nodeId: string) => {
-			updated[nodeId] = {
-				text: `🧠 ${nodeId} is thinking...`,
-				timestamp: now,
-			};
+			activeNodes?.forEach((nodeId: string) => {
+				updated[nodeId] = {
+					text: `🧠 ${nodeId} is thinking...`,
+					timestamp: now,
+				};
+			});
+
+			if (activeNode) {
+				updated[activeNode] = {
+					text: `⚡ ${activeNode} started`,
+					timestamp: now,
+				};
+			}
+
+			return updated;
 		});
-
-		if (activeNode) {
-			updated[activeNode] = {
-				text: `⚡ ${activeNode} started`,
-				timestamp: now,
-			};
-		}
-
-		return updated;
-	});
-}, [activeNodes, activeNode]);
+	}, [activeNodes, activeNode]);
 
 	useEffect(() => {
-	if (!completedNodes && !failedNodes) return;
+		if (!completedNodes && !failedNodes) return;
 
-	const now = Date.now();
+		const now = Date.now();
 
-	setThoughts((prev) => {
-		const updated = { ...prev };
+		setThoughts((prev) => {
+			const updated = { ...prev };
 
-		completedNodes?.forEach((id: string) => {
-			updated[id] = {
-				text: `✅ ${id} completed`,
-				timestamp: now,
-			};
+			completedNodes?.forEach((id: string) => {
+				updated[id] = {
+					text: `✅ ${id} completed`,
+					timestamp: now,
+				};
+			});
+
+			failedNodes?.forEach((id: string) => {
+				updated[id] = {
+					text: `❌ ${id} failed`,
+					timestamp: now,
+				};
+			});
+
+			return updated;
 		});
+	}, [completedNodes, failedNodes]);
 
-		failedNodes?.forEach((id: string) => {
-			updated[id] = {
-				text: `❌ ${id} failed`,
-				timestamp: now,
-			};
+	useEffect(() => {
+		if (!streamingContent) return;
+
+		setThoughts((prev) => {
+			const updated = { ...prev };
+			const now = Date.now();
+
+			Object.entries(streamingContent).forEach(([nodeId, content]) => {
+				if (!content) return;
+
+				updated[nodeId] = {
+					text: `🧠 ${nodeId}:\n${content}`,
+					timestamp: now,
+				};
+			});
+
+			return updated;
 		});
-
-		return updated;
-	});
-}, [completedNodes, failedNodes]);
+	}, [streamingContent]);
 
 	return (
-	<div style={{ display: "flex", flex: 1, minHeight: 500 }}>
-		{/* 🔥 GRAPH PANEL */}
-		<div style={{ flex: 2, minWidth: 0 }}>
-			<ReactFlow
-				nodes={rfNodes}
-				edges={rfEdges}
-				onInit={setRfInstance}
-			>
-				<Background />
-				<Controls />
-			</ReactFlow>
-		</div>
+		<div style={{ display: "flex", flex: 1, minHeight: 500 }}>
+			{/* 🔥 GRAPH PANEL */}
+			<div style={{ flex: 2, minWidth: 0 }}>
+				<ReactFlow
+					nodes={rfNodes}
+					edges={rfEdges}
+					onInit={setRfInstance}
+				>
+					<Background />
+					<Controls />
+				</ReactFlow>
+			</div>
 
-		{/* 🔥 RIGHT SIDE PANELS */}
-		<div
-			style={{
-				display: "flex",
-				width: 500,
-				borderLeft: "1px solid #ddd",
-				color: "#333",
-				fontFamily: "sans-serif",
-			}}
-		>
-			{/* 🧪 Researchers Panel */}
+			{/* 🔥 RIGHT SIDE PANELS */}
 			<div
 				style={{
-					flex: 1,
-					padding: 12,
-					overflowY: "auto",
-					background: "#fafafa",
-					borderRight: "1px solid #ddd",
-					maxHeight: "calc(100vh - 200px)",
+					display: "flex",
+					width: 500,
+					borderLeft: "1px solid #ddd",
+					color: "#333",
+					fontFamily: "sans-serif",
 				}}
 			>
-				<h3 style={{ marginTop: 0 }}>Researchers</h3>
+				{/* 🧪 Researchers Panel */}
+				<div
+					style={{
+						flex: 1,
+						padding: 12,
+						overflowY: "auto",
+						background: "#fafafa",
+						borderRight: "1px solid #ddd",
+						maxHeight: "calc(100vh - 200px)",
+					}}
+				>
+					<h3 style={{ marginTop: 0 }}>Researchers</h3>
 
-				{researchItems.length === 0 ? (
-					<p>No researchers yet</p>
-				) : (
-					<ul style={{ paddingLeft: 0, margin: 0, listStyle: "none" }}>
-						{researchItems
-							.slice(0, visibleResearchCount)
-							.map((topic: string, index: number) => {
-								const progress =
-									graphState?.researcherProgress?.[`research_${index}`] ?? 0;
+					{researchItems.length === 0 ? (
+						<p>No researchers yet</p>
+					) : (
+						<ul style={{ paddingLeft: 0, margin: 0, listStyle: "none" }}>
+							{researchItems
+								.slice(0, visibleResearchCount)
+								.map((topic: string, index: number) => {
+									const progress =
+										graphState?.researcherProgress?.[`research_${index}`] ?? 0;
 
-								return (
-									<li
-										key={index}
+									return (
+										<li
+											key={index}
+											style={{
+												marginBottom: 12,
+												padding: 8,
+												borderRadius: 8,
+												background: "#fff",
+												border: "1px solid #ddd",
+											}}
+										>
+											<div style={{ fontWeight: 700 }}>
+												Researcher {index + 1}
+											</div>
+											<div style={{ fontSize: 12, color: "#555" }}>
+												{topic}
+											</div>
+
+											<div
+												style={{
+													height: 6,
+													background: "#eee",
+													marginTop: 6,
+													borderRadius: 999,
+												}}
+											>
+												<div
+													style={{
+														width: `${progress}%`,
+														height: "100%",
+														background: "#1976d2",
+														borderRadius: 999,
+													}}
+												/>
+											</div>
+										</li>
+									);
+								})}
+						</ul>
+					)}
+				</div>
+
+				{/* 🧠 Thoughts Panel */}
+				<div
+					style={{
+						flex: 1,
+						padding: 12,
+						overflowY: "auto",
+						background: "#f5f5f5",
+						maxHeight: "calc(100vh - 200px)",
+					}}
+				>
+					<h3 style={{ marginTop: 0 }}>Agent Thoughts</h3>
+
+					{Object.keys(thoughts).length === 0 ? (
+						<p style={{ fontSize: 12, color: "#666" }}>
+							Waiting for agents...
+						</p>
+					) : (
+						<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+							{Object.entries(thoughts)
+								.sort((a, b) => b[1].timestamp - a[1].timestamp)
+								.map(([key, t]) => (
+									<div
+										key={key}
 										style={{
-											marginBottom: 12,
-											padding: 8,
-											borderRadius: 8,
+											fontSize: 12,
+											padding: "6px 8px",
+											borderRadius: 6,
 											background: "#fff",
 											border: "1px solid #ddd",
 										}}
 									>
-										<div style={{ fontWeight: 700 }}>
-											Researcher {index + 1}
-										</div>
-										<div style={{ fontSize: 12, color: "#555" }}>
-											{topic}
-										</div>
-
-										<div
-											style={{
-												height: 6,
-												background: "#eee",
-												marginTop: 6,
-												borderRadius: 999,
-											}}
-										>
-											<div
-												style={{
-													width: `${progress}%`,
-													height: "100%",
-													background: "#1976d2",
-													borderRadius: 999,
-												}}
-											/>
-										</div>
-									</li>
-								);
-							})}
-					</ul>
-				)}
-			</div>
-
-			{/* 🧠 Thoughts Panel */}
-			<div
-				style={{
-					flex: 1,
-					padding: 12,
-					overflowY: "auto",
-					background: "#f5f5f5",
-					maxHeight: "calc(100vh - 200px)",
-				}}
-			>
-				<h3 style={{ marginTop: 0 }}>Agent Thoughts</h3>
-
-				{Object.keys(thoughts).length === 0 ? (
-					<p style={{ fontSize: 12, color: "#666" }}>
-						Waiting for agents...
-					</p>
-				) : (
-					<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-						{Object.entries(thoughts)
-							.sort((a, b) => b[1].timestamp - a[1].timestamp)
-							.map(([key, t]) => (
-							<div
-								key={key}
-								style={{
-									fontSize: 12,
-									padding: "6px 8px",
-									borderRadius: 6,
-									background: "#fff",
-									border: "1px solid #ddd",
-								}}
-							>
-								{t.text}
-							</div>
-						))}
-					</div>
-				)}
+										{t.text}
+									</div>
+								))}
+						</div>
+					)}
+				</div>
 			</div>
 		</div>
-	</div>
-);
+	);
 }

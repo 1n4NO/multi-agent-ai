@@ -6,101 +6,137 @@ import { criticAgent } from "@/lib/agents/critic";
 import { parsePlanToTasks } from "@/lib/utils/parsePlan";
 import { webSearch } from "@/lib/tools/webSearch";
 
+async function streamText(
+	text: string,
+	nodeId: string,
+	onStep?: (data: any) => void
+) {
+	for (let i = 0; i < text.length; i += 5) {
+		const chunk = text.slice(i, i + 5);
+
+		onStep?.({
+			step: "stream",
+			nodeId,
+			content: chunk,
+		});
+
+		await new Promise((r) => setTimeout(r, 10)); // speed control
+	}
+}
+
 export function createGraph(goal: string) {
-  let tasks: string[] = [];
+	let tasks: string[] = [];
 
-  return {
-    nodes: {
-      planner: {
-        id: "planner",
-        run: async (state : any) => {
-          const plan = await plannerAgent(goal);
-          tasks = parsePlanToTasks(plan);
-          return plan;
-        },
-      },
+	return {
+		nodes: {
+			planner: {
+				id: "planner",
+				run: async (state: any, onStep?: any) => {
+					const plan = await plannerAgent(goal);
 
-      researchers: {
-        id: "researchers",
-        run: async (_state: any, onStep?: (data: any) => void) => {
-          const researchPromises = tasks.map(async (task, index) => {
-            const nodeId = `research_${index}`;
-            onStep?.({ step: `${nodeId}_start`, attempt: 1 });
+					// 🔥 STREAM OUTPUT
+					await streamText(plan, "planner", onStep);
 
-            // simulate minor incremental progress for UX (25/60/90) while running
-            onStep?.({ step: "NODE_PROGRESS", nodeId, progress: 10 });
+					tasks = parsePlanToTasks(plan);
 
-            const webData = await webSearch(task);
-            onStep?.({ step: "NODE_PROGRESS", nodeId, progress: 40 });
+					return plan;
+				},
+			},
 
-            const result = await researcherAgent(task + "\n" + webData);
-            onStep?.({ step: "NODE_PROGRESS", nodeId, progress: 80 });
+			researchers: {
+				id: "researchers",
+				run: async (_state: any, onStep?: (data: any) => void) => {
+					const researchPromises = tasks.map(async (task, index) => {
+						const nodeId = `research_${index}`;
+						onStep?.({ step: `${nodeId}_start`, attempt: 1 });
 
-            // final load for this researcher node
-            onStep?.({ step: `${nodeId}_done`, data: result });
-            onStep?.({ step: "NODE_PROGRESS", nodeId, progress: 100 });
+						// simulate minor incremental progress for UX (25/60/90) while running
+						onStep?.({ step: "NODE_PROGRESS", nodeId, progress: 10 });
 
-            return result;
-          });
+						const webData = await webSearch(task);
+						onStep?.({ step: "NODE_PROGRESS", nodeId, progress: 40 });
 
-          const results = await Promise.all(researchPromises);
-          return results;
-        },
-      },
+						const result = await researcherAgent(task + "\n" + webData);
 
-      synthesizer: {
-        id: "synthesizer",
-        run: async (state : any) => {
-          return await synthesizerAgent(
-            state.data.researchers
-          );
-        },
-      },
+						// 🔥 STREAM EACH RESEARCHER
+						await streamText(result, nodeId, onStep);
+						onStep?.({ step: "NODE_PROGRESS", nodeId, progress: 80 });
 
-      writer: {
-        id: "writer",
-        run: async (state : any) => {
-          return await writerAgent(
-            goal,
-            state.data.planner,
-            state.data.synthesizer
-          );
-        },
-      },
+						// final load for this researcher node
+						onStep?.({ step: `${nodeId}_done`, data: result });
+						onStep?.({ step: "NODE_PROGRESS", nodeId, progress: 100 });
 
-      critic: {
-        id: "critic",
-        run: async (state : any) => {
-          return await criticAgent(
-            goal,
-            state.data.planner,
-            state.data.writer
-          );
-        },
-      },
-    },
+						return result;
+					});
 
-    edges: [
-      { from: "planner", to: "researchers" },
-      { from: "researchers", to: "synthesizer" },
-      { from: "synthesizer", to: "writer" },
+					const results = await Promise.all(researchPromises);
+					return results;
+				},
+			},
 
-      // 🔁 LOOP: writer → critic
-      { from: "writer", to: "critic" },
+			synthesizer: {
+				id: "synthesizer",
+				run: async (state: any, onStep?: any) => {
+					const output = await synthesizerAgent(state.data.researchers);
 
-      // 🔥 CONDITIONAL LOOP BACK
-      {
-        from: "critic",
-        to: "writer",
-        condition: (state : any) => {
-          const output = state.data.critic || "";
-          const match = output.match(/(\d+)%/);
-          const score = match ? parseInt(match[1]) : 100;
+					await streamText(output, "synthesizer", onStep);
 
-          return score < 80 &&
-            (state.meta.attempts["writer"] || 0) < 3;
-        },
-      },
-    ],
-  };
+					return output;
+				},
+			},
+
+			writer: {
+				id: "writer",
+				run: async (state: any, onStep?: any) => {
+					const output = await writerAgent(
+						goal,
+						state.data.planner,
+						state.data.synthesizer
+					);
+
+					await streamText(output, "writer", onStep);
+
+					return output;
+				},
+			},
+
+			critic: {
+				id: "critic",
+				run: async (state: any, onStep?: any) => {
+					const output = await criticAgent(
+						goal,
+						state.data.planner,
+						state.data.writer
+					);
+
+					await streamText(output, "critic", onStep);
+
+					return output;
+				},
+			},
+		},
+
+		edges: [
+			{ from: "planner", to: "researchers" },
+			{ from: "researchers", to: "synthesizer" },
+			{ from: "synthesizer", to: "writer" },
+
+			// 🔁 LOOP: writer → critic
+			{ from: "writer", to: "critic" },
+
+			// 🔥 CONDITIONAL LOOP BACK
+			{
+				from: "critic",
+				to: "writer",
+				condition: (state: any) => {
+					const output = state.data.critic || "";
+					const match = output.match(/(\d+)%/);
+					const score = match ? parseInt(match[1]) : 100;
+
+					return score < 80 &&
+						(state.meta.attempts["writer"] || 0) < 3;
+				},
+			},
+		],
+	};
 }
