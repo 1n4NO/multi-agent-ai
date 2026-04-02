@@ -353,7 +353,7 @@ export default function AgentGraph({ graphState }: Props) {
 					<h3 style={{ marginBottom: 20 }}>Researchers</h3>
 
 					{researchItems.length === 0 ? (
-						<p>No researchers yet</p>
+						<p style={{ color: "#666" }}>No researchers yet</p>
 					) : (
 						<ul style={{ paddingLeft: 0, margin: 0, listStyle: "none" }}>
 							{researchItems
@@ -414,7 +414,7 @@ export default function AgentGraph({ graphState }: Props) {
 						maxHeight: "calc(100vh - 200px)",
 					}}
 				>
-					<h3 style={{ marginTop: 0 }}>
+					<h3 style={{ marginBottom: 20 }}>
 						Agent Thoughts
 					</h3>
 					{selectedNode ? (
@@ -451,7 +451,7 @@ export default function AgentGraph({ graphState }: Props) {
 							</button>
 						</div>
 					) : Object.keys(thoughts).length === 0 ? (
-						<p style={{ fontSize: 12, color: "#666", marginTop: 20 }}>
+						<p style={{ color: "#666" }}>
 							Waiting for agents...
 						</p>
 					) : (
