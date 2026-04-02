@@ -229,8 +229,8 @@ export default function Home() {
 
 					<Button
 						variant="contained"
-						disabled={!finalContent}
-						onClick={() => exportToPDF("AI Final Output", finalContent)}
+						disabled={!finalLog?.data}
+						onClick={() => exportToPDF("AI Report", finalLog?.data)}
 					>
 						Export PDF
 					</Button>

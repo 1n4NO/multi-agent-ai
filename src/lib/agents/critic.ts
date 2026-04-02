@@ -26,7 +26,7 @@ Tasks:
 
 Output format:
 
-## Final Answer
+## Final Criticism and Improvement Suggestions
 <improved solution>
 
 ## Confidence Score

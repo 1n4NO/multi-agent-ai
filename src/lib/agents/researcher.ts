@@ -13,8 +13,14 @@ Focus on:
 - Practical strategies
 - Real-world considerations
 
-Do not repeat the topic or provide a plan. Provide research findings in bullet points.
 Be concise but useful.
+
+Output format:
+
+## Researched on ${task}
+
+### Research findings in bullet points
+<number>. <insight 1>
 `;
 
 	return await callLLM(prompt);

@@ -4,98 +4,100 @@ export function copyToClipboard(text: string) {
 	navigator.clipboard.writeText(text);
 }
 
-export function exportToPDF(title: string, content: string) {
+export function exportToPDF(title: string, data: any) {
 	const doc = new jsPDF();
 
-	if (!content) {
-		console.warn("exportToPDF: content is empty");
+	if (!data) {
+		console.warn("exportToPDF: no data");
 		return;
 	}
 
-	// 🧠 Clean markdown
-	const cleanText = String(content)
-		.replace(/\*\*/g, "")
-		.replace(/#/g, "")
-		.replace(/\r/g, "")
-		.trim();
-
+	const marginX = 15;
+	let cursorY = 20;
 	const pageWidth = 180;
 	const pageHeight = 280;
 
-	const marginX = 10;
-	let cursorY = 15;
+	// 🧠 Helpers
+	const addPageIfNeeded = (space = 10) => {
+		if (cursorY + space > pageHeight) {
+			doc.addPage();
+			cursorY = 20;
+		}
+	};
 
-	// 🔥 TITLE
+	const addSection = (title: string, content?: string) => {
+		if (!content) return;
+
+		addPageIfNeeded(15);
+
+		doc.setFont("Helvetica", "bold");
+		doc.setFontSize(14);
+		doc.text(title, marginX, cursorY);
+
+		cursorY += 8;
+
+		doc.setFont("Helvetica", "normal");
+		doc.setFontSize(11);
+
+		const clean = String(content)
+			.replace(/\*\*/g, "")
+			.replace(/#/g, "")
+			.replace(/\r/g, "")
+			.trim();
+
+		const lines = doc.splitTextToSize(clean, pageWidth);
+
+		lines.forEach((line: string) => {
+			addPageIfNeeded(7);
+			doc.text(line, marginX, cursorY);
+			cursorY += 6;
+		});
+
+		cursorY += 6;
+	};
+
+	// 🏁 TITLE
 	doc.setFont("Helvetica", "bold");
 	doc.setFontSize(18);
 	doc.text(title, marginX, cursorY);
 
 	cursorY += 8;
 
-	// 🕒 Timestamp
 	doc.setFont("Helvetica", "normal");
 	doc.setFontSize(10);
-	doc.text(
-		`Generated on ${new Date().toLocaleString()}`,
-		marginX,
-		cursorY
-	);
+	doc.text(`Generated on ${new Date().toLocaleString()}`, marginX, cursorY);
 
-	cursorY += 8;
+	cursorY += 10;
 
-	// Divider
 	doc.setDrawColor(200);
 	doc.line(marginX, cursorY, marginX + pageWidth, cursorY);
 
 	cursorY += 10;
 
-	// 🧠 Split into paragraphs
-	const paragraphs = cleanText.split("\n");
+	// 🎯 SECTIONS
+	addSection("Planning", data.planner);
 
-	doc.setFontSize(11);
+	// 🧪 Researchers
+	if (Array.isArray(data.researchers)) {
+		data.researchers.forEach((r: string, i: number) => {
+			addSection(`Researcher ${i + 1}`, r);
+		});
+	}
 
-	paragraphs.forEach((para) => {
-		const text = para.trim();
-		if (!text) {
-			cursorY += 4;
-			return;
-		}
+	addSection("Synthesized Insights", data.synthesizer);
+	addSection("Draft Output", data.writer);
+	addSection("Final Answer", data.critic);
 
-		// 🧠 Detect headings (simple heuristic)
-		const isHeading =
-			text.length < 60 &&
-			(text === text.toUpperCase() || /^[A-Z]/.test(text));
+	// 📄 Footer
+	const pageCount = doc.getNumberOfPages();
 
-		// 🔥 Page break check
-		if (cursorY > pageHeight - 15) {
-			doc.addPage();
-			cursorY = 15;
-		}
+	for (let i = 1; i <= pageCount; i++) {
+		doc.setPage(i);
+		doc.setFontSize(10);
+		doc.text(`Page ${i} of ${pageCount}`, 200, 290, {
+			align: "right",
+		});
+	}
 
-		if (isHeading) {
-			doc.setFont("Helvetica", "bold");
-			doc.setFontSize(13);
-
-			doc.text(text, marginX, cursorY);
-			cursorY += 7;
-
-			doc.setFont("Helvetica", "normal");
-			doc.setFontSize(11);
-		} else {
-			const lines = doc.splitTextToSize(text, pageWidth);
-
-			lines.forEach((line: string) => {
-				if (cursorY > pageHeight - 10) {
-					doc.addPage();
-					cursorY = 15;
-				}
-
-				doc.text(line, marginX, cursorY);
-				cursorY += 6;
-			});
-		}
-	});
-
-	// 🔥 Save
 	doc.save(`${title.replace(/\s+/g, "_")}.pdf`);
 }
