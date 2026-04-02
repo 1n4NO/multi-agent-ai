@@ -59,11 +59,13 @@ export default function Home() {
 				const chunk = decoder.decode(value);
 				const lines = chunk.split("\n\n");
 
+				const newLogs: any[] = [];
+
 				lines.forEach((line) => {
 					if (line.startsWith("data: ")) {
 						const parsed = JSON.parse(line.replace("data: ", ""));
 
-						setLogs((prev) => [...prev, parsed]);
+						newLogs.push(parsed);
 
 						const step = parsed.step;
 
@@ -128,6 +130,11 @@ export default function Home() {
 						}
 					}
 				});
+
+				// 🔥 SINGLE STATE UPDATE (important)
+				if (newLogs.length > 0) {
+					setLogs((prev) => [...prev, ...newLogs]);
+				}
 			}
 		} catch (err: any) {
 			if (err.name === "AbortError") {
