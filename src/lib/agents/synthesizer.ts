@@ -2,7 +2,8 @@ import { callLLM } from "@/lib/llm/ollama";
 
 export async function synthesizerAgent(
 	researchOutputs: string[],
-	citationCatalog: string
+	citationCatalog: string,
+	signal?: AbortSignal
 ): Promise<string> {
 	const prompt = `
 You are a SYNTHESIZER agent.
@@ -22,5 +23,5 @@ Rules:
 - When a factual claim needs support, cite it with inline HTML anchor tags like <a href="https://example.com" target="_blank" rel="noreferrer">[1]</a>
 `;
 
-	return await callLLM(prompt);
+	return await callLLM(prompt, signal);
 }

@@ -1,7 +1,10 @@
 import { callLLM } from "@/lib/llm/ollama";
 import { getRecentMemory } from "@/lib/memory/store";
 
-export async function plannerAgent(userGoal: string): Promise<string> {
+export async function plannerAgent(
+  userGoal: string,
+  signal?: AbortSignal
+): Promise<string> {
   const memory = getRecentMemory();
 
   const prompt = `
@@ -38,5 +41,5 @@ FAIL CONDITION:
 If you include anything other than the numbered steps, the response is invalid.
 `;
 
-  return await callLLM(prompt);
+  return await callLLM(prompt, signal);
 }

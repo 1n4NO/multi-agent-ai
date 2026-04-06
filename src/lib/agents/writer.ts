@@ -4,7 +4,8 @@ export async function writerAgent(
 	goal: string,
 	plan: string,
 	research: string,
-	citationCatalog: string
+	citationCatalog: string,
+	signal?: AbortSignal
 ): Promise<string> {
 	const prompt = `
 You are a WRITER agent.
@@ -34,5 +35,5 @@ Citation rules:
 - Reuse the exact URL from the citation catalog
 `;
 
-	return await callLLM(prompt);
+	return await callLLM(prompt, signal);
 }

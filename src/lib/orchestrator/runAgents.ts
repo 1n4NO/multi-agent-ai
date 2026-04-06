@@ -2,8 +2,13 @@ import { executeGraph } from "@/lib/graph/engine";
 import { createGraph } from "@/lib/graph/nodes";
 import { saveToMemory } from "@/lib/memory/store";
 import { GraphState } from "@/lib/graph/types";
+import { throwIfAborted } from "@/lib/utils/abort";
 
-export async function runAgents(goal: string, onStep?: any) {
+export async function runAgents(
+	goal: string,
+	onStep?: (event: Record<string, unknown>) => void,
+	signal?: AbortSignal
+) {
 	const graph = createGraph(goal);
 
 	// ✅ Properly initialize state
@@ -15,11 +20,12 @@ export async function runAgents(goal: string, onStep?: any) {
 		},
 	};
 
-	const results = await executeGraph(graph, initialState, (event: any) => {
+	const results = await executeGraph(graph, initialState, (event) => {
 		// Pass everything upstream (SSE layer will handle it)
 		onStep?.(event);
-	});
+	}, signal);
 
+	throwIfAborted(signal);
 	saveToMemory(goal, results);
 
 	return results;

@@ -11,6 +11,7 @@ import {
 	Stack,
 } from "@mui/material";
 import { copyToClipboard, exportToPDF } from "@/lib/utils/export";
+import { parsePlanToTasks } from "@/lib/utils/parsePlan";
 import AgentGraph from "@/components/AgentGraph";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 import { useGraphState } from "@/hooks/useGraphState";
@@ -205,13 +206,10 @@ export default function Home() {
 							});
 
 							if (nodeId === "planner") {
-								const parsePlannerOutput = (text: string) =>
-									text
-										.split(/\n\d+\.\s/)
-										.map((item) => item.trim())
-										.filter(Boolean);
-
-								const tasks = parsePlannerOutput(parsed.data);
+								const tasks =
+									typeof parsed.data === "string"
+										? parsePlanToTasks(parsed.data)
+										: [];
 
 								actions.push({
 									type: "PLANNER_DONE",

@@ -3,6 +3,7 @@ const DEFAULT_MAX_RESULTS = 5;
 const DEFAULT_MAX_SCRAPED_PAGES = 3;
 const DEFAULT_PAGE_TEXT_LIMIT = 4000;
 const DEFAULT_TIMEOUT_MS = 15000;
+import { isAbortError, throwIfAborted } from "@/lib/utils/abort";
 
 export type SearchHit = {
 	title: string;
@@ -123,14 +124,17 @@ function extractDuckDuckGoResults(html: string, maxResults: number): SearchHit[]
 
 export async function searchDuckDuckGo(
 	query: string,
-	maxResults = DEFAULT_MAX_RESULTS
+	maxResults = DEFAULT_MAX_RESULTS,
+	signal?: AbortSignal
 ): Promise<SearchHit[]> {
+	throwIfAborted(signal);
 	const response = await fetch(DUCKDUCKGO_HTML_URL, {
 		method: "POST",
 		headers: {
 			"content-type": "application/x-www-form-urlencoded",
 			"user-agent": getUserAgent(),
 		},
+		signal,
 		body: new URLSearchParams({
 			q: query,
 		}),
@@ -141,6 +145,7 @@ export async function searchDuckDuckGo(
 	}
 
 	const html = await response.text();
+	throwIfAborted(signal);
 	const results = extractDuckDuckGoResults(html, maxResults);
 
 	if (results.length === 0) {
@@ -174,12 +179,14 @@ async function createBrowser() {
 async function scrapePageContent(
 	browser: Awaited<ReturnType<typeof createBrowser>>,
 	url: string,
-	maxChars = DEFAULT_PAGE_TEXT_LIMIT
+	maxChars = DEFAULT_PAGE_TEXT_LIMIT,
+	signal?: AbortSignal
 ): Promise<string | null> {
 	if (!browser) {
 		return null;
 	}
 
+	throwIfAborted(signal);
 	const page = await browser.newPage();
 
 	try {
@@ -188,6 +195,7 @@ async function scrapePageContent(
 			waitUntil: "domcontentloaded",
 			timeout: DEFAULT_TIMEOUT_MS,
 		});
+		throwIfAborted(signal);
 
 		const content = await page.evaluate(() => {
 			const selectors = ["main", "article", "[role='main']", "body"];
@@ -219,7 +227,8 @@ async function scrapePageContent(
 
 export async function scrapeSearchHits(
 	results: SearchHit[],
-	maxScrapedPages = DEFAULT_MAX_SCRAPED_PAGES
+	maxScrapedPages = DEFAULT_MAX_SCRAPED_PAGES,
+	signal?: AbortSignal
 ) {
 	const enrichedResults = [...results];
 	const browser = await createBrowser();
@@ -228,21 +237,37 @@ export async function scrapeSearchHits(
 		return enrichedResults;
 	}
 
+	const onAbort = () => {
+		void browser.close().catch(() => {
+			// Ignore browser close errors during abort.
+		});
+	};
+
+	signal?.addEventListener("abort", onAbort, { once: true });
+
 	try {
+		throwIfAborted(signal);
 		for (let index = 0; index < Math.min(maxScrapedPages, enrichedResults.length); index += 1) {
+			throwIfAborted(signal);
 			const result = enrichedResults[index];
 
 			try {
-				const content = await scrapePageContent(browser, result.url);
+				const content = await scrapePageContent(browser, result.url, DEFAULT_PAGE_TEXT_LIMIT, signal);
 				if (content) {
 					result.content = content;
 				}
-			} catch {
+			} catch (error) {
+				if (isAbortError(error)) {
+					throw error;
+				}
 				// Keep the search hit even if scraping fails.
 			}
 		}
 	} finally {
-		await browser.close();
+		signal?.removeEventListener("abort", onAbort);
+		await browser.close().catch(() => {
+			// Ignore browser close errors after abort.
+		});
 	}
 
 	return enrichedResults;
@@ -373,9 +398,12 @@ export function formatCitationCatalogMarkdown(
 	return `## Citations\n\n${entries.join("\n\n")}`;
 }
 
-export async function realWebSearch(query: string): Promise<WebResearchResult> {
-	const results = await searchDuckDuckGo(query);
-	const enrichedResults = await scrapeSearchHits(results);
+export async function realWebSearch(
+	query: string,
+	signal?: AbortSignal
+): Promise<WebResearchResult> {
+	const results = await searchDuckDuckGo(query, DEFAULT_MAX_RESULTS, signal);
+	const enrichedResults = await scrapeSearchHits(results, DEFAULT_MAX_SCRAPED_PAGES, signal);
 
 	return {
 		query,

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { runAgents } from "@/lib/orchestrator/runAgents";
+import { isAbortError } from "@/lib/utils/abort";
 
 export async function POST(req: NextRequest) {
   const { goal } = await req.json();
@@ -7,21 +8,50 @@ export async function POST(req: NextRequest) {
 
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (data: any) => {
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify(data)}\n\n`)
-        );
+      let closed = false;
+
+      const close = () => {
+        if (closed) {
+          return;
+        }
+
+        closed = true;
+
+        try {
+          controller.close();
+        } catch {
+          // Ignore close failures after abort/disconnect.
+        }
       };
 
+      const send = (data: Record<string, unknown>) => {
+        if (closed || req.signal.aborted) {
+          return;
+        }
+
+        try {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(data)}\n\n`)
+          );
+        } catch {
+          close();
+        }
+      };
+
+      req.signal.addEventListener("abort", close, { once: true });
+
       try {
-        const result = await runAgents(goal, send);
+        const result = await runAgents(goal, send, req.signal);
 
-        send({ step: "complete", data: result });
-
-        controller.close();
-      } catch {
-        send({ step: "error" });
-        controller.close();
+        if (!req.signal.aborted) {
+          send({ step: "complete", data: result });
+        }
+      } catch (error) {
+        if (!isAbortError(error) && !req.signal.aborted) {
+          send({ step: "error" });
+        }
+      } finally {
+        close();
       }
     },
   });

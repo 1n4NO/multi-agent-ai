@@ -4,7 +4,8 @@ export async function criticAgent(
 	goal: string,
 	plan: string,
 	content: string,
-	citationCatalog: string
+	citationCatalog: string,
+	signal?: AbortSignal
 ): Promise<string> {
 	const prompt = `
 You are a CRITIC agent.
@@ -46,5 +47,5 @@ Output format:
 <short explanation>
 `;
 
-	return await callLLM(prompt);
+	return await callLLM(prompt, signal);
 }

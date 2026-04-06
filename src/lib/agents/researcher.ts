@@ -2,7 +2,8 @@ import { callLLM } from "@/lib/llm/ollama";
 
 export async function researcherAgent(
 	task: string,
-	groundedResearch: string
+	groundedResearch: string,
+	signal?: AbortSignal
 ): Promise<string> {
 	const prompt = `
 You are a RESEARCH AGENT.
@@ -35,5 +36,5 @@ Output format:
 <number>. <insight 1>
 `;
 
-	return await callLLM(prompt);
+	return await callLLM(prompt, signal);
 }

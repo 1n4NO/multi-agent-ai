@@ -7,9 +7,17 @@ export type GraphEvent = {
 
 export type StepCallback = (data: GraphEvent) => void;
 
+export type ExecutionContext = {
+	signal?: AbortSignal;
+};
+
 export type GraphNode = {
 	id: NodeId;
-	run: (state: GraphState, onStep?: StepCallback) => Promise<unknown>;
+	run: (
+		state: GraphState,
+		onStep?: StepCallback,
+		context?: ExecutionContext
+	) => Promise<unknown>;
 };
 
 export type Edge = {
