@@ -154,11 +154,17 @@ export function createGraph(goal: string): Graph {
 					const citationCatalog = Array.isArray(state.data.citationCatalog)
 						? (state.data.citationCatalog as CitationEntry[])
 						: [];
+					const previousDraft =
+						typeof state.data.writer === "string" ? state.data.writer : "";
+					const criticFeedback =
+						typeof state.data.critic === "string" ? state.data.critic : "";
 					const output = await writerAgent(
 						goal,
 						typeof state.data.planner === "string" ? state.data.planner : "",
 						typeof state.data.synthesizer === "string" ? state.data.synthesizer : "",
 						formatCitationCatalogForAgent(citationCatalog),
+						previousDraft,
+						criticFeedback,
 						context?.signal
 					);
 

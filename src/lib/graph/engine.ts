@@ -1,6 +1,9 @@
 import { Graph, GraphState, StepCallback } from "./types";
 import { throwIfAborted } from "@/lib/utils/abort";
 
+const DEFAULT_MAX_NODE_EXECUTIONS = 25;
+const DEFAULT_MAX_TOTAL_EXECUTIONS = 100;
+
 export async function executeGraph(
   graph: Graph,
   initialState: GraphState,
@@ -8,14 +11,33 @@ export async function executeGraph(
   signal?: AbortSignal
 ) {
   const state = initialState;
+  const pendingNodes: string[] = ["planner"];
+  const executionCounts: Record<string, number> = {};
+  let totalExecutions = 0;
 
-  async function runNode(nodeId: string): Promise<void> {
+  async function runNode(nodeId: string): Promise<string[]> {
     throwIfAborted(signal);
     const node = graph.nodes[nodeId];
+    if (!node) {
+      throw new Error(`Graph execution failed: missing node "${nodeId}".`);
+    }
+
+    totalExecutions += 1;
+    if (totalExecutions > DEFAULT_MAX_TOTAL_EXECUTIONS) {
+      throw new Error(
+        `Graph execution exceeded the total safety limit of ${DEFAULT_MAX_TOTAL_EXECUTIONS} node runs.`
+      );
+    }
 
     // track attempts
-    state.meta.attempts[nodeId] =
-      (state.meta.attempts[nodeId] || 0) + 1;
+    executionCounts[nodeId] = (executionCounts[nodeId] || 0) + 1;
+    state.meta.attempts[nodeId] = executionCounts[nodeId];
+
+    if (executionCounts[nodeId] > DEFAULT_MAX_NODE_EXECUTIONS) {
+      throw new Error(
+        `Graph execution exceeded the per-node safety limit for "${nodeId}" (${DEFAULT_MAX_NODE_EXECUTIONS} runs).`
+      );
+    }
 
     onStep?.({
       step: `${nodeId}_start`,
@@ -40,12 +62,32 @@ export async function executeGraph(
     );
 
     for (const edge of nextEdges) {
-      throwIfAborted(signal);
-      await runNode(edge.to);
+      if (!graph.nodes[edge.to]) {
+        throw new Error(
+          `Graph execution failed: edge "${edge.from}" -> "${edge.to}" targets a missing node.`
+        );
+      }
+    }
+
+    return nextEdges.map((edge) => edge.to);
+  }
+
+  while (pendingNodes.length > 0) {
+    throwIfAborted(signal);
+
+    const nodeId = pendingNodes.pop();
+    if (!nodeId) {
+      continue;
+    }
+
+    const nextNodeIds = await runNode(nodeId);
+
+    // Reverse to preserve the previous depth-first edge execution order.
+    for (let index = nextNodeIds.length - 1; index >= 0; index -= 1) {
+      pendingNodes.push(nextNodeIds[index]);
     }
   }
 
-  await runNode("planner");
   throwIfAborted(signal);
 
   return state.data;
