@@ -28,6 +28,10 @@ type RunResult = {
 type LogEvent = {
 	step?: string;
 	data?: RunResult;
+	nodeId?: string;
+	content?: string;
+	progress?: number;
+	attempt?: number;
 	[key: string]: unknown;
 };
 
@@ -148,85 +152,101 @@ export default function Home() {
 
 			const reader = res.body?.getReader();
 			const decoder = new TextDecoder();
+			let buffer = "";
+
+			if (!reader) {
+				throw new Error("Streaming response body is unavailable.");
+			}
 
 			while (true) {
-				const { done, value } = await reader!.read();
-				if (done) break;
+				const { done, value } = await reader.read();
+				buffer += decoder.decode(value, { stream: !done });
 
-				const chunk = decoder.decode(value);
-				const lines = chunk.split("\n\n");
+				const events = buffer.split("\n\n");
+				buffer = events.pop() ?? "";
 
 				const newLogs: LogEvent[] = [];
 				const actions: Array<Record<string, unknown>> = [];
 
-				lines.forEach((line) => {
-					if (line.startsWith("data: ")) {
-						const parsed = JSON.parse(line.replace("data: ", ""));
+				events.forEach((eventChunk) => {
+					const dataLines = eventChunk
+						.split("\n")
+						.filter((line) => line.startsWith("data: "))
+						.map((line) => line.slice(6));
 
-						newLogs.push(parsed);
+					if (dataLines.length === 0) {
+						return;
+					}
 
-						const step = parsed.step;
+					const parsed = JSON.parse(dataLines.join("\n")) as LogEvent;
 
-						// 🔥 STREAM
-						if (step === "stream") {
+					newLogs.push(parsed);
+
+					const step = parsed.step;
+
+					// 🔥 STREAM
+					if (step === "stream" && parsed.nodeId && typeof parsed.content === "string") {
+						actions.push({
+							type: "NODE_STREAM",
+							nodeId: parsed.nodeId,
+							content: parsed.content,
+						});
+						return;
+					}
+
+					// 🔥 PROGRESS
+					if (step === "NODE_PROGRESS" && parsed.nodeId) {
+						actions.push({
+							type: "NODE_PROGRESS",
+							nodeId: parsed.nodeId,
+							progress: typeof parsed.progress === "number" ? parsed.progress : 0,
+						});
+						return;
+					}
+
+					// 🔥 START
+					if (step?.includes("_start")) {
+						actions.push({
+							type: "NODE_START",
+							nodeId: step.replace("_start", ""),
+							attempt: typeof parsed.attempt === "number" ? parsed.attempt : undefined,
+						});
+					}
+
+					// 🔥 DONE
+					if (step?.includes("_done")) {
+						const nodeId = step.replace("_done", "");
+
+						actions.push({
+							type: "NODE_DONE",
+							nodeId,
+						});
+
+						if (nodeId === "planner") {
+							const tasks =
+								typeof parsed.data === "string"
+									? parsePlanToTasks(parsed.data)
+									: [];
+
 							actions.push({
-								type: "NODE_STREAM",
-								nodeId: parsed.nodeId,
-								content: parsed.content,
+								type: "PLANNER_DONE",
+								data: {
+									researchers: tasks.map((t: string) => ({
+										topic: t,
+									})),
+								},
 							});
-							return;
-						}
-
-						// 🔥 PROGRESS
-						if (step === "NODE_PROGRESS") {
-							actions.push({
-								type: "NODE_PROGRESS",
-								nodeId: parsed.nodeId,
-								progress: parsed.progress ?? 0,
-							});
-							return;
-						}
-
-						// 🔥 START
-						if (step?.includes("_start")) {
-							actions.push({
-								type: "NODE_START",
-								nodeId: step.replace("_start", ""),
-								attempt: parsed.attempt,
-							});
-						}
-
-						// 🔥 DONE
-						if (step?.includes("_done")) {
-							const nodeId = step.replace("_done", "");
-
-							actions.push({
-								type: "NODE_DONE",
-								nodeId,
-							});
-
-							if (nodeId === "planner") {
-								const tasks =
-									typeof parsed.data === "string"
-										? parsePlanToTasks(parsed.data)
-										: [];
-
-								actions.push({
-									type: "PLANNER_DONE",
-									data: {
-										researchers: tasks.map((t: string) => ({
-											topic: t,
-										})),
-									},
-								});
-							}
-						}
-
-						if (step === "complete") {
-							setIsRunning(false);
 						}
 					}
+
+					if (step === "complete") {
+						setIsRunning(false);
+					}
 				});
+
+				if (done) {
+					break;
+				}
 
 				// ✅ APPLY ONCE
 				if (newLogs.length > 0) {

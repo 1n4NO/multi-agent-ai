@@ -1,19 +1,26 @@
 export function parsePlanToTasks(plan: string): string[] {
-  const lines = plan.split("\n");
+  const normalizedPlan = plan.replace(/\r/g, "").trim();
 
-  return lines
-    .map((line) => line.trim())
-    .filter(
-      (line) =>
-        /^\d+\./.test(line) ||     // 1. Task
-        /^-\s/.test(line) ||       // - Task
-        /^Step\s*\d+/i.test(line)  // Step 1: Task
+  if (!normalizedPlan) {
+    return [];
+  }
+
+  const numberedMatches = Array.from(
+    normalizedPlan.matchAll(
+      /(?:^|\n|\s)(?:Step\s*)?(\d+)[.:]\s*([\s\S]*?)(?=(?:\n|\s)(?:Step\s*)?\d+[.:]\s|$)/gi
     )
-    .map((line) =>
-      line
-        .replace(/^\d+\.\s*/, "")
-        .replace(/^-\s*/, "")
-        .replace(/^Step\s*\d+:\s*/i, "")
-        .trim()
-    );
+  );
+
+  if (numberedMatches.length > 0) {
+    return numberedMatches
+      .map((match) => match[2].trim())
+      .filter(Boolean);
+  }
+
+  return normalizedPlan
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^-\s+/.test(line))
+    .map((line) => line.replace(/^-\s+/, "").trim())
+    .filter(Boolean);
 }
