@@ -1,6 +1,14 @@
 import jsPDF from "jspdf";
 import { loadImageAsBase64 } from "./loadImage";
 
+type ExportableRunResult = {
+	planner?: string;
+	researchers?: string[];
+	synthesizer?: string;
+	writer?: string;
+	critic?: string;
+};
+
 const LOGO_RATIO = 1382 / 752;
 
 const getLogoSize = (targetWidth: number) => {
@@ -14,7 +22,7 @@ export function copyToClipboard(text: string) {
 	navigator.clipboard.writeText(text);
 }
 
-export async function exportToPDF(title: string, data: any) {
+export async function exportToPDF(title: string, data?: ExportableRunResult) {
 	const doc = new jsPDF();
 
 	if (!data) return;

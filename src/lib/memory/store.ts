@@ -1,12 +1,12 @@
 type MemoryEntry = {
   goal: string;
-  result: any;
+  result: Record<string, unknown>;
   timestamp: number;
 };
 
 const memory: MemoryEntry[] = [];
 
-export function saveToMemory(goal: string, result: any) {
+export function saveToMemory(goal: string, result: Record<string, unknown>) {
   memory.push({
     goal,
     result,
