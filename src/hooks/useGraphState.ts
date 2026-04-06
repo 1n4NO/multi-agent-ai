@@ -2,9 +2,29 @@
 
 import { useReducer } from "react";
 
+type PlannerResearcher = {
+	topic: string;
+};
+
+type PlannerDonePayload = {
+	researchers: PlannerResearcher[];
+};
+
+type PlannerOutput = {
+	raw: PlannerDonePayload;
+	researchers: string[];
+};
+
+type LastEvent =
+	| Action
+	| {
+			type: "RESET";
+	  }
+	| null;
+
 type State = {
 	goal: string;
-	data: Record<string, any>;
+	data: Record<string, unknown>;
 	meta: {
 		attempts: Record<string, number>;
 	};
@@ -14,12 +34,14 @@ type State = {
 	failedNodes: Set<string>;
 	attempts: Record<string, number>;
 	researcherProgress: Record<string, number>;
-	lastEvent: any;
+	lastEvent: LastEvent;
 
 	// ✅ stores planner output (researchers list)
-	plannerOutput: any;
+	plannerOutput: PlannerOutput | null;
 	streamingContent: Record<string, string>;
 };
+
+export type GraphUIState = State;
 
 type Action =
 	| { type: "NODE_START"; nodeId: string; attempt?: number }
@@ -27,7 +49,7 @@ type Action =
 	| { type: "NODE_DONE"; nodeId: string }
 	| { type: "NODE_FAIL"; nodeId: string }
 	| { type: "NODE_STREAM"; nodeId: string; content: string }
-	| { type: "PLANNER_DONE"; data: any }
+	| { type: "PLANNER_DONE"; data: PlannerDonePayload }
 	| { type: "RESET" };
 
 const initialState: State = {
@@ -135,7 +157,7 @@ function reducer(state: State, action: Action): State {
 				...state,
 				plannerOutput: {
 					raw: action.data,
-					researchers: action?.data?.researchers.map((item: any) => item.topic),
+					researchers: action.data.researchers.map((item) => item.topic),
 				},
 				lastEvent: action,
 			};

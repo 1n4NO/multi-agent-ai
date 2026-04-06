@@ -15,10 +15,106 @@ import AgentGraph from "@/components/AgentGraph";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 import { useGraphState } from "@/hooks/useGraphState";
 import { ReactFlowProvider } from "reactflow";
+import type { CitationEntry, ResearchSourceGroup, SearchHit } from "@/lib/tools/realWebSearch";
+
+type RunResult = {
+	critic?: string;
+	writer?: string;
+	citationCatalog?: CitationEntry[];
+	researchSources?: ResearchSourceGroup[];
+};
+
+type LogEvent = {
+	step?: string;
+	data?: RunResult;
+	[key: string]: unknown;
+};
+
+function buildAnchorTag(url: string, label: string) {
+	return `<a href="${url}" target="_blank" rel="noreferrer">${label}</a>`;
+}
+
+function buildFinalCitationsMarkdown(
+	researchSources: ResearchSourceGroup[],
+	existingCatalog?: CitationEntry[]
+) {
+	if (existingCatalog && existingCatalog.length > 0) {
+		const entries = existingCatalog.map((citation) => {
+			const lines = [
+				`### [${citation.id}] ${buildAnchorTag(citation.url, citation.title)}`,
+				`- URL: ${buildAnchorTag(citation.url, citation.url)}`,
+				`- Used in: ${citation.tasks.join("; ")}`,
+				"- Propagated to: Synthesizer, Writer, Critic",
+			];
+
+			if (citation.snippet) {
+				lines.push(`- Search context: ${citation.snippet}`);
+			}
+
+			return lines.join("\n");
+		});
+
+		return `## Citations\n\n${entries.join("\n\n")}`;
+	}
+
+	const sourceUsage = new Map<
+		string,
+		{
+			title: string;
+			url: string;
+			snippet: string;
+			tasks: string[];
+		}
+	>();
+
+	researchSources
+		.slice()
+		.sort((a, b) => a.nodeId.localeCompare(b.nodeId))
+		.forEach((group) => {
+			group.sources.forEach((source: SearchHit) => {
+				const existing = sourceUsage.get(source.url);
+
+				if (existing) {
+					if (!existing.tasks.includes(group.task)) {
+						existing.tasks.push(group.task);
+					}
+					return;
+				}
+
+				sourceUsage.set(source.url, {
+					title: source.title,
+					url: source.url,
+					snippet: source.snippet,
+					tasks: [group.task],
+				});
+			});
+		});
+
+	if (sourceUsage.size === 0) {
+		return "## Citations\n\nNo external sources were successfully collected for this run.";
+	}
+
+	const entries = Array.from(sourceUsage.values()).map((source, index) => {
+		const lines = [
+			`### [${index + 1}] ${buildAnchorTag(source.url, source.title)}`,
+			`- URL: ${buildAnchorTag(source.url, source.url)}`,
+			`- Used in: ${source.tasks.join("; ")}`,
+			"- Propagated to: Synthesizer, Writer, Critic",
+		];
+
+		if (source.snippet) {
+			lines.push(`- Search context: ${source.snippet}`);
+		}
+
+		return lines.join("\n");
+	});
+
+	return `## Citations\n\n${entries.join("\n\n")}`;
+}
 
 export default function Home() {
 	const [goal, setGoal] = useState("");
-	const [logs, setLogs] = useState<any[]>([]);
+	const [logs, setLogs] = useState<LogEvent[]>([]);
 	const { state, dispatch } = useGraphState();
 	const [isRunning, setIsRunning] = useState(false);
 	const [controller, setController] = useState<AbortController | null>(null);
@@ -59,8 +155,8 @@ export default function Home() {
 				const chunk = decoder.decode(value);
 				const lines = chunk.split("\n\n");
 
-				const newLogs: any[] = [];
-				const actions: any[] = [];
+				const newLogs: LogEvent[] = [];
+				const actions: Array<Record<string, unknown>> = [];
 
 				lines.forEach((line) => {
 					if (line.startsWith("data: ")) {
@@ -153,8 +249,8 @@ export default function Home() {
 					}
 				}
 			}
-		} catch (err: any) {
-			if (err.name === "AbortError") {
+		} catch (err: unknown) {
+			if (err instanceof Error && err.name === "AbortError") {
 				console.log("Run cancelled");
 			} else {
 				console.error(err);
@@ -171,6 +267,13 @@ export default function Home() {
 		finalLog?.data?.critic ||
 		finalLog?.data?.writer ||
 		"";
+	const finalCitations = buildFinalCitationsMarkdown(
+		finalLog?.data?.researchSources ?? [],
+		finalLog?.data?.citationCatalog
+	);
+	const finalReport = finalContent
+		? `${finalContent}\n\n${finalCitations}`
+		: "";
 
 
 	return (
@@ -221,8 +324,8 @@ export default function Home() {
 				<Stack direction="row" spacing={2} justifyContent="flex-end">
 					<Button
 						variant="outlined"
-						disabled={!finalContent}
-						onClick={() => copyToClipboard(finalContent)}
+						disabled={!finalReport}
+						onClick={() => copyToClipboard(finalReport)}
 					>
 						Copy
 					</Button>
@@ -237,6 +340,23 @@ export default function Home() {
 						Export PDF
 					</Button>
 				</Stack>
+
+				{finalContent ? (
+					<Paper sx={{ p: 3 }}>
+						<Stack spacing={3}>
+							<Box>
+								<Typography variant="h5" sx={{ mb: 2 }}>
+									Final Output
+								</Typography>
+								<MarkdownRenderer content={finalContent} />
+							</Box>
+
+							<Box>
+								<MarkdownRenderer content={finalCitations} />
+							</Box>
+						</Stack>
+					</Paper>
+				) : null}
 			</Box>
 		</Container>
 	);

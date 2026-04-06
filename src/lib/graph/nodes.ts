@@ -5,7 +5,15 @@ import { writerAgent } from "@/lib/agents/writer";
 import { criticAgent } from "@/lib/agents/critic";
 import { Graph, GraphState, StepCallback } from "@/lib/graph/types";
 import { parsePlanToTasks } from "@/lib/utils/parsePlan";
-import { formatWebResearchForAgent, realWebSearch } from "@/lib/tools/realWebSearch";
+import {
+	buildCitationCatalog,
+	formatCitationCatalogForAgent,
+	formatCitationBlock,
+	formatWebResearchForAgent,
+	realWebSearch,
+	type CitationEntry,
+	type ResearchSourceGroup,
+} from "@/lib/tools/realWebSearch";
 
 async function streamText(
 	text: string,
@@ -46,40 +54,65 @@ export function createGraph(goal: string): Graph {
 
 			researchers: {
 				id: "researchers",
-				run: async (_state: GraphState, onStep?: StepCallback) => {
+				run: async (state: GraphState, onStep?: StepCallback) => {
 					const researchPromises = tasks.map(async (task, index) => {
-							const nodeId = `research_${index}`;
-							onStep?.({ step: `${nodeId}_start`, attempt: 1 });
-							let groundedResearch = "No web findings were available.";
+						const nodeId = `research_${index}`;
+						onStep?.({ step: `${nodeId}_start`, attempt: 1 });
+						let groundedResearch = "No web findings were available.";
+						let consultedSources: ResearchSourceGroup["sources"] = [];
+						let searchErrorMessage: string | undefined;
 
-							// simulate minor incremental progress for UX (25/60/90) while running
-							onStep?.({ step: "NODE_PROGRESS", nodeId, progress: 10 });
+						// simulate minor incremental progress for UX (25/60/90) while running
+						onStep?.({ step: "NODE_PROGRESS", nodeId, progress: 10 });
 
-							try {
-								const webResearch = await realWebSearch(task);
-								groundedResearch = formatWebResearchForAgent(webResearch);
-							} catch (error) {
-								const message =
-									error instanceof Error ? error.message : "Unknown search error";
-								groundedResearch = `Web search failed for this task: ${message}`;
-							}
-							onStep?.({ step: "NODE_PROGRESS", nodeId, progress: 55 });
+						try {
+							const webResearch = await realWebSearch(task);
+							consultedSources = webResearch.results;
+							groundedResearch = formatWebResearchForAgent(webResearch);
+						} catch (error) {
+							const message =
+								error instanceof Error ? error.message : "Unknown search error";
+							searchErrorMessage = message;
+							groundedResearch = `Web search failed for this task: ${message}`;
+						}
+						onStep?.({ step: "NODE_PROGRESS", nodeId, progress: 55 });
 
-							const result = await researcherAgent(task, groundedResearch);
+						const result = await researcherAgent(task, groundedResearch);
+						const citationBlock = formatCitationBlock(
+							task,
+							consultedSources,
+							searchErrorMessage
+						);
+						const finalResearchOutput = `${citationBlock}\n\n${result}`;
 
 						// 🔥 STREAM EACH RESEARCHER
-						await streamText(result, nodeId, onStep);
+						await streamText(finalResearchOutput, nodeId, onStep);
 						onStep?.({ step: "NODE_PROGRESS", nodeId, progress: 80 });
 
 						// final load for this researcher node
-						onStep?.({ step: `${nodeId}_done`, data: result });
+						onStep?.({ step: `${nodeId}_done`, data: finalResearchOutput });
 						onStep?.({ step: "NODE_PROGRESS", nodeId, progress: 100 });
 
-						return result;
+						return {
+							nodeId,
+							task,
+							output: finalResearchOutput,
+							sources: consultedSources,
+						};
 					});
 
 					const results = await Promise.all(researchPromises);
-					return results;
+					const researchSources: ResearchSourceGroup[] = results.map((result) => ({
+						nodeId: result.nodeId,
+						task: result.task,
+						sources: result.sources,
+					}));
+					const citationCatalog = buildCitationCatalog(researchSources);
+
+					state.data.researchSources = researchSources;
+					state.data.citationCatalog = citationCatalog;
+
+					return results.map((result) => result.output);
 				},
 			},
 
@@ -89,7 +122,13 @@ export function createGraph(goal: string): Graph {
 					const researchOutputs = Array.isArray(state.data.researchers)
 						? (state.data.researchers as string[])
 						: [];
-					const output = await synthesizerAgent(researchOutputs);
+					const citationCatalog = Array.isArray(state.data.citationCatalog)
+						? (state.data.citationCatalog as CitationEntry[])
+						: [];
+					const output = await synthesizerAgent(
+						researchOutputs,
+						formatCitationCatalogForAgent(citationCatalog)
+					);
 
 					await streamText(output, "synthesizer", onStep);
 
@@ -100,10 +139,14 @@ export function createGraph(goal: string): Graph {
 			writer: {
 				id: "writer",
 				run: async (state: GraphState, onStep?: StepCallback) => {
+					const citationCatalog = Array.isArray(state.data.citationCatalog)
+						? (state.data.citationCatalog as CitationEntry[])
+						: [];
 					const output = await writerAgent(
 						goal,
 						typeof state.data.planner === "string" ? state.data.planner : "",
-						typeof state.data.synthesizer === "string" ? state.data.synthesizer : ""
+						typeof state.data.synthesizer === "string" ? state.data.synthesizer : "",
+						formatCitationCatalogForAgent(citationCatalog)
 					);
 
 					await streamText(output, "writer", onStep);
@@ -115,10 +158,14 @@ export function createGraph(goal: string): Graph {
 			critic: {
 				id: "critic",
 				run: async (state: GraphState, onStep?: StepCallback) => {
+					const citationCatalog = Array.isArray(state.data.citationCatalog)
+						? (state.data.citationCatalog as CitationEntry[])
+						: [];
 					const output = await criticAgent(
 						goal,
 						typeof state.data.planner === "string" ? state.data.planner : "",
-						typeof state.data.writer === "string" ? state.data.writer : ""
+						typeof state.data.writer === "string" ? state.data.writer : "",
+						formatCitationCatalogForAgent(citationCatalog)
 					);
 
 					await streamText(output, "critic", onStep);
@@ -137,14 +184,14 @@ export function createGraph(goal: string): Graph {
 			{ from: "writer", to: "critic" },
 
 			// 🔥 CONDITIONAL LOOP BACK
-				{
-					from: "critic",
-					to: "writer",
-					condition: (state: GraphState) => {
-						const output =
-							typeof state.data.critic === "string" ? state.data.critic : "";
-						const match = output.match(/(\d+)%/);
-						const score = match ? parseInt(match[1]) : 100;
+			{
+				from: "critic",
+				to: "writer",
+				condition: (state: GraphState) => {
+					const output =
+						typeof state.data.critic === "string" ? state.data.critic : "";
+					const match = output.match(/(\d+)%/);
+					const score = match ? parseInt(match[1]) : 100;
 
 					return score < 80 &&
 						(state.meta.attempts["writer"] || 0) < 3;

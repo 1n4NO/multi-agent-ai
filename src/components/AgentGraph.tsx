@@ -1,18 +1,36 @@
 "use client";
 
-import ReactFlow, { Background, Controls, Node, Edge, useNodesState, useEdgesState } from "reactflow";
-import { useEffect, useState, useRef } from "react";
+import ReactFlow, {
+	Background,
+	Controls,
+	type Edge,
+	type Node,
+	type ReactFlowInstance,
+	useNodesState,
+	useEdgesState,
+} from "reactflow";
+import { useEffect, useState } from "react";
 import "reactflow/dist/style.css";
 import { useMemo } from "react";
 import dagre from "dagre";
 import isEqual from "lodash/isEqual";
+import type { GraphUIState } from "@/hooks/useGraphState";
+import MarkdownRenderer from "@/components/MarkdownRenderer";
 
 type Props = {
-	graphState: any;
+	graphState: GraphUIState;
 };
 
 const nodeWidth = 150;
 const nodeHeight = 50;
+const EMPTY_STREAMING_CONTENT: Record<string, string> = {};
+const EMPTY_RESEARCH_ITEMS: string[] = [];
+const BASE_NODES: Node[] = [
+	{ id: "planner", data: { label: "Planner" }, position: { x: 0, y: 0 } },
+	{ id: "synthesizer", data: { label: "Synthesizer" }, position: { x: 0, y: 0 } },
+	{ id: "writer", data: { label: "Writer" }, position: { x: 0, y: 0 } },
+	{ id: "critic", data: { label: "Critic" }, position: { x: 0, y: 0 } },
+];
 
 function getLayoutedElements(nodes: Node[], edges: Edge[]) {
 	const g = new dagre.graphlib.Graph();
@@ -48,27 +66,18 @@ function getLayoutedElements(nodes: Node[], edges: Edge[]) {
 
 export default function AgentGraph({ graphState }: Props) {
 	const { activeNode, activeNodes, completedNodes, failedNodes, researcherProgress } = graphState;
-	const [rfInstance, setRfInstance] = useState<any>(null);
-	const [rfNodes, setRfNodes, onNodesChange] = useNodesState([]);
-	const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState([]);
+	const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null);
+	const [rfNodes, setRfNodes] = useNodesState([]);
+	const [rfEdges, setRfEdges] = useEdgesState([]);
 	const [visibleResearchCount, setVisibleResearchCount] = useState(0);
-	const [thoughts, setThoughts] = useState<
-		Record<string, { text: string; timestamp: number }>
-	>({});
-	const thoughtIdCounter = useRef(0);
-	const streamingContent = graphState.streamingContent || {};
+	const streamingContent =
+		graphState.streamingContent ?? EMPTY_STREAMING_CONTENT;
 	const [selectedNode, setSelectedNode] = useState<string | null>(null);
+	const displayedSelectedNode =
+		graphState.lastEvent?.type === "RESET" ? null : selectedNode;
 
 
 	const isResearchNode = (id: string) => id.startsWith("research_");
-
-	const getNodeStatus = (id: string) => {
-		if (failedNodes?.has(id)) return "failed";
-		if (completedNodes?.has(id)) return "completed";
-		if (activeNodes?.has(id)) return "active";
-		if (activeNode === id) return "active";
-		return "idle";
-	};
 
 	const getNodeStyle = (status: string, progress?: number) => {
 		const baseStyle = (() => {
@@ -94,67 +103,68 @@ export default function AgentGraph({ graphState }: Props) {
 		return baseStyle;
 	};
 
-	// Static nodes
-	const baseNodes: Node[] = [
-		{ id: "planner", data: { label: "Planner" }, position: { x: 0, y: 0 } },
-		{ id: "synthesizer", data: { label: "Synthesizer" }, position: { x: 0, y: 0 } },
-		{ id: "writer", data: { label: "Writer" }, position: { x: 0, y: 0 } },
-		{ id: "critic", data: { label: "Critic" }, position: { x: 0, y: 0 } },
-	];
-
 	// Dynamic researcher nodes
-	const researchItems = graphState?.plannerOutput?.researchers || [];
+	const researchItems =
+		graphState?.plannerOutput?.researchers ?? EMPTY_RESEARCH_ITEMS;
 
-	const dynamicResearchNodes: Node[] = researchItems
-		.slice(0, visibleResearchCount)
-		.map((topic: string, index: number) => {
-			const progress = graphState?.researcherProgress?.[`research_${index}`] ?? 0;
-			return {
-				id: `research_${index}`,
-				data: {
-					label: `Researcher ${index + 1}`,
-					topic,
-					progress,
-				},
-				position: { x: 0, y: 0 },
-			};
+	const dynamicResearchNodes = useMemo<Node[]>(() => {
+		return researchItems
+			.slice(0, visibleResearchCount)
+			.map((topic: string, index: number) => {
+				const progress = researcherProgress[`research_${index}`] ?? 0;
+				return {
+					id: `research_${index}`,
+					data: {
+						label: `Researcher ${index + 1}`,
+						topic,
+						progress,
+					},
+					position: { x: 0, y: 0 },
+				};
+			});
+	}, [researchItems, visibleResearchCount, researcherProgress]);
+
+	const nodes = useMemo<Node[]>(() => {
+		return [...BASE_NODES, ...dynamicResearchNodes];
+	}, [dynamicResearchNodes]);
+
+	const edges = useMemo<Edge[]>(() => {
+		const nextEdges: Edge[] = [
+			{ id: "e1", source: "synthesizer", target: "writer" },
+			{ id: "e2", source: "writer", target: "critic" },
+		];
+
+		researchItems.slice(0, visibleResearchCount).forEach((_, index: number) => {
+			nextEdges.push({
+				id: `er_${index}`,
+				source: "planner",
+				target: `research_${index}`,
+			});
+
+			nextEdges.push({
+				id: `er2_${index}`,
+				source: `research_${index}`,
+				target: "synthesizer",
+			});
 		});
 
-	const nodes = [...baseNodes, ...dynamicResearchNodes];
-
-	const edges: Edge[] = [
-		{ id: "e1", source: "synthesizer", target: "writer" },
-		{ id: "e2", source: "writer", target: "critic" },
-	];
-
-	researchItems.slice(0, visibleResearchCount).forEach((_: any, index: number) => {
-		edges.push({
-			id: `er_${index}`,
-			source: "planner",
-			target: `research_${index}`,
-		});
-
-		edges.push({
-			id: `er2_${index}`,
-			source: `research_${index}`,
-			target: "synthesizer",
-		});
-	});
+		return nextEdges;
+	}, [researchItems, visibleResearchCount]);
 
 	useEffect(() => {
-		if (!researchItems || researchItems.length === 0) {
-			setVisibleResearchCount(0);
+		if (researchItems.length === 0) {
+			requestAnimationFrame(() => {
+				setVisibleResearchCount(0);
+			});
 			return;
 		}
 
 		// Reset when new plan arrives
-		setVisibleResearchCount(0);
-
-		let index = 0;
+		requestAnimationFrame(() => {
+			setVisibleResearchCount(0);
+		});
 
 		const interval = setInterval(() => {
-			index++;
-
 			setVisibleResearchCount((prev) => {
 				if (prev >= researchItems.length) {
 					clearInterval(interval);
@@ -173,7 +183,13 @@ export default function AgentGraph({ graphState }: Props) {
 	// Apply styles
 	const styledNodes = useMemo(() => {
 		return layouted.nodes.map((node) => {
-			const status = getNodeStatus(node.id);
+			const status = (() => {
+				if (failedNodes?.has(node.id)) return "failed";
+				if (completedNodes?.has(node.id)) return "completed";
+				if (activeNodes?.has(node.id)) return "active";
+				if (activeNode === node.id) return "active";
+				return "idle";
+			})();
 
 			const progress =
 				node.data?.progress ??
@@ -182,7 +198,7 @@ export default function AgentGraph({ graphState }: Props) {
 					: undefined);
 
 			// 🔥 ADD THIS
-			const isSelected = node.id === selectedNode;
+			const isSelected = node.id === displayedSelectedNode;
 
 			return {
 				...node,
@@ -202,7 +218,7 @@ export default function AgentGraph({ graphState }: Props) {
 		completedNodes,
 		failedNodes,
 		researcherProgress,
-		selectedNode, // 🔥 IMPORTANT: add dependency
+		displayedSelectedNode,
 	]);
 
 	useEffect(() => {
@@ -233,86 +249,55 @@ export default function AgentGraph({ graphState }: Props) {
 				}, 120); // 🔥 critical fix (was 0)
 			});
 		}
-	}, [rfInstance, styledNodes, layouted.edges]);
+	}, [rfInstance, styledNodes, layouted.edges, rfNodes, rfEdges, setRfNodes, setRfEdges]);
 
-	useEffect(() => {
-		if (!activeNodes && !activeNode) return;
+	const thoughts = useMemo<Record<string, { text: string; timestamp: number }>>(() => {
+		if (graphState.lastEvent?.type === "RESET") {
+			return {};
+		}
 
-		const now = Date.now();
+		const nextThoughts: Record<string, { text: string; timestamp: number }> = {};
+		let order = 0;
 
-		setThoughts((prev) => {
-			const updated = { ...prev };
+		const addThought = (nodeId: string, text: string) => {
+			order += 1;
+			nextThoughts[nodeId] = {
+				text,
+				timestamp: order,
+			};
+		};
 
-			activeNodes?.forEach((nodeId: string) => {
-				updated[nodeId] = {
-					text: `🧠 ${formatNodeLabel(nodeId)} is thinking...`,
-					timestamp: now,
-				};
-			});
-
-			if (activeNode) {
-				updated[activeNode] = {
-					text: `⚡ ${formatNodeLabel(activeNode)} started`,
-					timestamp: now,
-				};
-			}
-
-			return updated;
+		activeNodes?.forEach((nodeId: string) => {
+			addThought(nodeId, `🧠 ${formatNodeLabel(nodeId)} is thinking...`);
 		});
-	}, [activeNodes, activeNode]);
 
-	useEffect(() => {
-		if (!completedNodes && !failedNodes) return;
+		if (activeNode) {
+			addThought(activeNode, `⚡ ${formatNodeLabel(activeNode)} started`);
+		}
 
-		const now = Date.now();
-
-		setThoughts((prev) => {
-			const updated = { ...prev };
-
-			completedNodes?.forEach((id: string) => {
-				updated[id] = {
-					text: `✅ ${formatNodeLabel(id)} completed`,
-					timestamp: now,
-				};
-			});
-
-			failedNodes?.forEach((id: string) => {
-				updated[id] = {
-					text: `❌ ${formatNodeLabel(id)} failed`,
-					timestamp: now,
-				};
-			});
-
-			return updated;
+		completedNodes?.forEach((id: string) => {
+			addThought(id, `✅ ${formatNodeLabel(id)} completed`);
 		});
-	}, [completedNodes, failedNodes]);
 
-	useEffect(() => {
-		if (!streamingContent) return;
-
-		setThoughts((prev) => {
-			const updated = { ...prev };
-			const now = Date.now();
-
-			Object.entries(streamingContent).forEach(([nodeId, content]) => {
-				if (!content) return;
-
-				updated[nodeId] = {
-					text: `🧠 ${formatNodeLabel(nodeId)}:\n${content}`,
-					timestamp: now,
-				};
-			});
-
-			return updated;
+		failedNodes?.forEach((id: string) => {
+			addThought(id, `❌ ${formatNodeLabel(id)} failed`);
 		});
-	}, [streamingContent]);
 
-	useEffect(() => {
-	if (graphState.lastEvent?.type === "RESET") {
-		setThoughts({});
-		setSelectedNode(null); // also clear selection
-	}
-}, [graphState.lastEvent]);
+		Object.entries(streamingContent).forEach(([nodeId, content]) => {
+			if (!content) return;
+
+			addThought(nodeId, `🧠 ${formatNodeLabel(nodeId)}:\n${content}`);
+		});
+
+		return nextThoughts;
+	}, [
+		activeNode,
+		activeNodes,
+		completedNodes,
+		failedNodes,
+		graphState.lastEvent,
+		streamingContent,
+	]);
 
 	return (
 		<div style={{ display: "flex", flex: 1, minHeight: "calc(100vh - 200px)" }}>
@@ -417,25 +402,26 @@ export default function AgentGraph({ graphState }: Props) {
 					<h3 style={{ marginBottom: 20 }}>
 						Agent Thoughts
 					</h3>
-					{selectedNode ? (
-						<div>
-							<h3 style={{ marginTop: 20, marginBottom: 10 }}>
-								{formatNodeLabel(selectedNode)}
-							</h3>
+					{displayedSelectedNode ? (
+							<div>
+								<h3 style={{ marginTop: 20, marginBottom: 10 }}>
+									{formatNodeLabel(displayedSelectedNode)}
+								</h3>
 
 							<div
 								style={{
-									fontSize: 12,
 									background: "#fff",
 									border: "1px solid #ddd",
 									borderRadius: 6,
 									padding: 10,
-									whiteSpace: "pre-wrap",
-									lineHeight: 1.5,
 								}}
 							>
-								{streamingContent[selectedNode] ||
-									"No reasoning yet..."}
+								<MarkdownRenderer
+									content={
+										streamingContent[displayedSelectedNode] ||
+										"No reasoning yet..."
+									}
+								/>
 							</div>
 
 							<button

@@ -16,6 +16,33 @@ export type WebResearchResult = {
 	results: SearchHit[];
 };
 
+export type ResearchSourceGroup = {
+	nodeId: string;
+	task: string;
+	sources: SearchHit[];
+};
+
+export type CitationEntry = {
+	id: number;
+	title: string;
+	url: string;
+	snippet: string;
+	tasks: string[];
+};
+
+function escapeHtml(value: string): string {
+	return value
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;");
+}
+
+function buildAnchorTag(url: string, label: string): string {
+	return `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a>`;
+}
+
 type PuppeteerModule = {
 	default: {
 		launch: (options?: {
@@ -237,6 +264,113 @@ export function formatWebResearchForAgent(research: WebResearchResult): string {
 			return sections.join("\n");
 		})
 		.join("\n\n");
+}
+
+export function formatCitationBlock(
+	task: string,
+	sources: SearchHit[],
+	errorMessage?: string
+): string {
+	const lines = [`## Sources Consulted`, `Task: ${task}`];
+
+	if (sources.length === 0) {
+		lines.push("No sources were successfully collected.");
+	} else {
+		sources.forEach((source, index) => {
+			lines.push(`${index + 1}. ${buildAnchorTag(source.url, source.title)}`);
+
+			if (source.snippet) {
+				lines.push(`   Why consulted: ${source.snippet}`);
+			}
+		});
+	}
+
+	if (errorMessage) {
+		lines.push(`Search note: ${errorMessage}`);
+	}
+
+	return lines.join("\n");
+}
+
+export function buildCitationCatalog(
+	researchSources: ResearchSourceGroup[]
+): CitationEntry[] {
+	const sourceUsage = new Map<string, CitationEntry>();
+
+	researchSources
+		.slice()
+		.sort((a, b) => a.nodeId.localeCompare(b.nodeId))
+		.forEach((group) => {
+			group.sources.forEach((source) => {
+				const existing = sourceUsage.get(source.url);
+
+				if (existing) {
+					if (!existing.tasks.includes(group.task)) {
+						existing.tasks.push(group.task);
+					}
+					return;
+				}
+
+				sourceUsage.set(source.url, {
+					id: sourceUsage.size + 1,
+					title: source.title,
+					url: source.url,
+					snippet: source.snippet,
+					tasks: [group.task],
+				});
+			});
+		});
+
+	return Array.from(sourceUsage.values());
+}
+
+export function formatCitationCatalogForAgent(
+	citationCatalog: CitationEntry[]
+): string {
+	if (citationCatalog.length === 0) {
+		return "No citations are available for this run.";
+	}
+
+	return citationCatalog
+		.map((citation) => {
+			const lines = [
+				`[${citation.id}] ${citation.title}`,
+				`URL: ${citation.url}`,
+				`Research tasks: ${citation.tasks.join("; ")}`,
+			];
+
+			if (citation.snippet) {
+				lines.push(`Search context: ${citation.snippet}`);
+			}
+
+			return lines.join("\n");
+		})
+		.join("\n\n");
+}
+
+export function formatCitationCatalogMarkdown(
+	citationCatalog: CitationEntry[]
+): string {
+	if (citationCatalog.length === 0) {
+		return "## Citations\n\nNo external sources were successfully collected for this run.";
+	}
+
+	const entries = citationCatalog.map((citation) => {
+		const lines = [
+			`### [${citation.id}] ${buildAnchorTag(citation.url, citation.title)}`,
+			`- URL: ${buildAnchorTag(citation.url, citation.url)}`,
+			`- Used in: ${citation.tasks.join("; ")}`,
+			"- Propagated to: Synthesizer, Writer, Critic",
+		];
+
+		if (citation.snippet) {
+			lines.push(`- Search context: ${citation.snippet}`);
+		}
+
+		return lines.join("\n");
+	});
+
+	return `## Citations\n\n${entries.join("\n\n")}`;
 }
 
 export async function realWebSearch(query: string): Promise<WebResearchResult> {
